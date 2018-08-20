@@ -1,0 +1,7 @@
+nomenclature:
+  name: noticeboard
+  verboseName: Notice Board
+baseUrls:
+  http: noticeboard/
+  ws: noticeboard/
+  isApi: true

@@ -1,5 +1,6 @@
 import swapper
 import datetime
+from tinymce import HTMLField
 
 from django.db import models
 from django.contrib.contenttypes.models import ContentType
@@ -16,18 +17,11 @@ class AbstractNotice(Model):
     This class holds general informations about a notice.
     """
 
-    ### TODO
-    # Add fields:
-    # 1. has_attachment (Filemanager)
-    # 2. attachment (Filemanager)
-    # 3. reference (When required)
-    ###
-
     title = models.CharField(
         max_length=255,
     )
-    content = models.TextField(
-        blank=True,
+    content = HTMLField(
+        'Content',
     )
 
     banner = models.ForeignKey(

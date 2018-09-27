@@ -12,7 +12,7 @@ class User(Model):
     This class holds information about a user
     """
 
-    person = models.ForeignKey(
+    person = models.OneToOneField(
         to=swapper.get_model_name('kernel', 'Person'),
         related_name='notice_user',
         on_delete=models.CASCADE,

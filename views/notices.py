@@ -23,15 +23,15 @@ def user_allowed_banners(roles, person):
     """
 
     banner_ids = []
+    if roles:
+        for role in roles.values():
+            role_object = role['instance']
+            role_content_type = ContentType.objects.get_for_model(role_object)
 
-    for role in roles.values():
-        role_object = role['instance']
-        role_content_type = ContentType.objects.get_for_model(role_object)
-
-        banner_ids += Permissions.objects.filter(
-            persona_object_id=role_object.id,
-            persona_content_type=role_content_type
-        ).values_list('banner_id', flat=True)
+            banner_ids += Permissions.objects.filter(
+                persona_object_id=role_object.id,
+                persona_content_type=role_content_type
+            ).values_list('banner_id', flat=True)
 
     return banner_ids
 

@@ -20,7 +20,9 @@ from noticeboard.models import *
 
 def user_allowed_banners(roles, person):
     """
-    Given a user, return all the allowed banners
+    Given a user, return all the allowed banners.
+
+    This view handles the permissions of a user under a particular banner
     """
 
     banner_ids = []
@@ -38,6 +40,11 @@ def user_allowed_banners(roles, person):
 
 
 def get_drafted_notices(request):
+    """
+    Corresponding to a person, this function checks all the allowed banners
+    and gets all the notices drafted according to those banners
+    """
+
     person, roles = request.person, request.roles
     allowed_banner_ids = user_allowed_banners(roles, person)
 
@@ -50,12 +57,15 @@ def get_drafted_notices(request):
 class NoticeViewSet(viewsets.ModelViewSet):
     """
     This view handles the drafted and the current notices
+
+    This view takes the GET Params:
+    1. 'class': Notice class corresponding to drafts
+    2. 'keyword': Search keyword
     """
 
     def get_queryset(self):
 
         notice_class = self.request.query_params.get('class', None)
-
         keyword = self.request.query_params.get('keyword', None)
         search_vector = SearchVector('title', 'content')
 
@@ -113,6 +123,7 @@ class NoticeViewSet(viewsets.ModelViewSet):
         if serializer.is_valid():
             banner_id = data['banner']['id']
 
+            # Check if the user is authenticated to post under a banner
             allowed_banner_ids = user_allowed_banners(roles, person)
             if banner_id in allowed_banner_ids:
                 serializer.save()
@@ -132,6 +143,7 @@ class NoticeViewSet(viewsets.ModelViewSet):
         if serializer.is_valid():
             banner_id = notice.banner.id
 
+            # Check if the user is authenticated to post under a banner
             allowed_banner_ids = user_allowed_banners(roles, person)
             if banner_id in allowed_banner_ids:
                 serializer.save()
@@ -144,6 +156,9 @@ class NoticeViewSet(viewsets.ModelViewSet):
 class ExpiredNoticeViewSet(viewsets.ModelViewSet):
     """
     This view handles the expired notices
+
+    This view takes the GET Params:
+    1. 'keyword': Search keyword
     """
 
     lookup_field = 'notice_id'

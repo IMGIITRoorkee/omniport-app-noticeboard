@@ -43,6 +43,10 @@ def filter_search(data, queryset):
 class FilterViewSet(viewsets.ReadOnlyModelViewSet):
     """
     This view filters the notices according to a banner
+
+    This view takes the following GET Parameters:
+    1. 'banner': Filter corresponding to a banner id
+    2. 'keyword': Search keyword
     """
 
     serializer_class = NoticeListSerializer
@@ -107,7 +111,7 @@ class DateFilterViewSet(viewsets.ReadOnlyModelViewSet):
 
 class StarFilterViewSet(viewsets.ReadOnlyModelViewSet):
     """
-    This view returns all the starred notices
+    This view returns all the starred notices of a notice user
     """
 
     serializer_class = NoticeListSerializer

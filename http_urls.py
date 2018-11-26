@@ -13,16 +13,13 @@ notice = NoticeViewSet.as_view({
     'put': 'update'
 })
 
-expired_notices = ExpiredNoticeViewSet.as_view({
+expired_notice_list = ExpiredNoticeViewSet.as_view({
     'get': 'list',
 })
 expired_notice = ExpiredNoticeViewSet.as_view({
     'get': 'retrieve',
 })
 
-search_notices = SearchViewSet.as_view({
-    'get': 'list'
-})
 filter_list = FilterListViewSet.as_view({
     'get': 'list'
 })
@@ -41,11 +38,10 @@ permissions = PersonPermissionViewSet.as_view({
 })
 
 urlpatterns = [
-    url(r'notice_list/', notice_list),
-    url(r'notice/(?P<pk>[0-9]+)/$', notice),
-    url(r'expired_notices/', expired_notices),
-    url(r'expired_notice/(?P<notice_id>[0-9]+)/$', expired_notice),
-    url(r'search/', search_notices),
+    url(r'new/$', notice_list),
+    url(r'new/(?P<pk>[0-9]+)/', notice),
+    url(r'old/$', expired_notice_list, name='expired_notice_list'),
+    url(r'old/(?P<notice_id>[0-9]+)/', expired_notice, name='expired_notice'),
     url(r'star_read/', StarReadNotices.as_view(), name='star_read'),
     url(r'filter_list/', filter_list),
     url(r'filter/', filter_view),

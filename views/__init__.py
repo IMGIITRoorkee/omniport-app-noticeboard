@@ -11,9 +11,6 @@ from noticeboard.views.filters import (
     FilterViewSet,
     StarFilterViewSet,
 )
-from noticeboard.views.search import (
-    SearchViewSet,
-)
 from noticeboard.views.permissions import (
     PersonPermissionViewSet,
 )

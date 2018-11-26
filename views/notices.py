@@ -5,6 +5,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from django.http import Http404
 from django.contrib.contenttypes.models import ContentType
+from django.contrib.postgres.search import SearchVector
 
 from noticeboard.serializers import (
     NoticeSerializer,
@@ -55,6 +56,9 @@ class NoticeViewSet(viewsets.ModelViewSet):
 
         notice_class = self.request.query_params.get('class', None)
 
+        keyword = self.request.query_params.get('keyword', None)
+        search_vector = SearchVector('title', 'content')
+
         if self.action == 'create':
             queryset = Notice.objects.all()
 
@@ -65,6 +69,10 @@ class NoticeViewSet(viewsets.ModelViewSet):
 
             if notice_class == 'draft':
                 queryset = get_drafted_notices(self.request)
+            elif keyword:
+                queryset = Notice.objects.annotate(
+                    search=search_vector
+                ).filter(search=keyword).filter(is_draft=False)
             else:
                 queryset = Notice.objects.filter(is_draft=False)
 
@@ -138,9 +146,19 @@ class ExpiredNoticeViewSet(viewsets.ModelViewSet):
     This view handles the expired notices
     """
 
-    serializer_class = ExpiredNoticeListSerializer
     lookup_field = 'notice_id'
-    queryset = ExpiredNotice.objects.filter(is_draft=False)
+
+    def get_queryset(self):
+        keyword = self.request.query_params.get('keyword', None)
+        search_vector = SearchVector('title', 'content')
+
+        if keyword:
+            queryset = ExpiredNotice.objects.annotate(
+                search=search_vector
+            ).filter(search=keyword).filter(is_draft=False)
+        else:
+            queryset = ExpiredNotice.objects.filter(is_draft=False)
+        return queryset
 
     def get_serializer_class(self):
         """

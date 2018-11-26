@@ -68,26 +68,46 @@ class DateFilterViewSet(viewsets.ReadOnlyModelViewSet):
     """
     This view filters the notices according to the start and
     end date
+
+    This view takes the following GET Parameters:
+    1. 'start': Start date
+    2. 'end': End date
+    3. 'banner': Filter corresponding to a banner id
+    4. 'keyword': Search keyword
     """
 
     serializer_class = NoticeListSerializer
 
+    def get_object(self, pk):
+        try:
+            return Banner.objects.get(pk=pk)
+        except Banner.DoesNotExist:
+            raise Http404
+
     def get_queryset(self):
         data = self.request.query_params
-        start_date, end_date = data.get('start', None), data.get('end', None)
 
+        # Filter corresponding to a date
+        start_date, end_date = data.get('start', None), data.get('end', None)
         queryset = Notice.objects.filter(datetime_created__range=(
             start_date,
             end_date
         ))
+
+        # Filter corresponding to a banner
+        banner_id = data.get('banner', None)
+        if banner_id:
+            banner_object = self.get_object(banner_id)
+            queryset = queryset.filter(banner=banner_object)
+
+        # Search
         queryset = filter_search(data, queryset)
         return queryset
 
 
 class StarFilterViewSet(viewsets.ReadOnlyModelViewSet):
     """
-    This view filters the notices according to the start and
-    end date
+    This view returns all the starred notices
     """
 
     serializer_class = NoticeListSerializer

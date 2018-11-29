@@ -1,6 +1,6 @@
 import swapper
 import datetime
-from tinymce import HTMLField
+from tinymce.models import HTMLField
 
 from django.db import models
 from django.contrib.contenttypes.models import ContentType

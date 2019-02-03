@@ -1,6 +1,8 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
+from rest_framework.exceptions import NotFound
 from django.http import Http404
 
 from noticeboard.models import (
@@ -12,14 +14,13 @@ from noticeboard.models import (
 
 class StarReadNotices(APIView):
 
-    def get_object(self, pk):
-        try:
-            Notice.objects.get(pk=pk)
-        except Notice.DoesNotExist:
-            try:
-                ExpiredNotice.objects.get(pk=pk)
-            except ExpiredNotice.DoesNotExist:
-                raise Http404
+    permission_classes = [IsAuthenticated, ]
+
+    def check_notice_object(self, pk):
+        if Notice.objects.filter(pk=pk).exists():
+            pass
+        else:
+            raise Http404
 
     def post(self, request, format=None):
         """
@@ -29,27 +30,28 @@ class StarReadNotices(APIView):
         notices: [List[id]]
         keyword: str  (unread, read, starred, unstarred)
         """
-        person = request.person
-        notice_user, created = User.objects.get_or_create(person=person)
 
+        notice_user, created = User.objects.get_or_create(person=request.person)
         data = request.data
+
+        if 'notices' not in data.keys() or 'keyword' not in data.keys():
+            return Response(status=status.HTTP_400_BAD_REQUEST)
+
         notices, keyword = data['notices'], data['keyword']
         if keyword not in ['read', 'unread', 'star', 'unstar']:
             return Response(status=status.HTTP_400_BAD_REQUEST)
 
-        if person:
-            for notice_id in notices:
-                self.get_object(notice_id)
+        for notice_id in notices:
+            self.check_notice_object(notice_id)
 
-            if keyword == 'read':
-                notice_user.read_notices.add(*notices)
-            elif keyword == 'unread':
-                notice_user.read_notices.remove(*notices)
-            elif keyword == 'star':
-                notice_user.starred_notices.add(*notices)
-            elif keyword == 'unstar':
-                notice_user.starred_notices.remove(*notices)
+        if keyword == 'read':
+            notice_user.read_notices.add(*notices)
+        elif keyword == 'unread':
+            notice_user.read_notices.remove(*notices)
+        elif keyword == 'star':
+            notice_user.starred_notices.add(*notices)
+        elif keyword == 'unstar':
+            notice_user.starred_notices.remove(*notices)
 
-            notice_user.save()
-            return Response(status=status.HTTP_201_CREATED)
-        return Response(status=status.HTTP_400_BAD_REQUEST)
+        notice_user.save()
+        return Response(status=status.HTTP_201_CREATED)

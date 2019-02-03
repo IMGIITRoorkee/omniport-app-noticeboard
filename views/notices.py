@@ -2,19 +2,13 @@ from rest_framework import viewsets
 from django.db.models import Q
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
 from django.http import Http404
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.postgres.search import SearchVector
 
-from noticeboard.serializers import (
-    NoticeSerializer,
-    NoticeDetailSerializer,
-    NoticeUpdateSerializer,
-    NoticeListSerializer,
-    ExpiredNoticeListSerializer,
-    ExpiredNoticeDetailSerializer,
-)
+from noticeboard.serializers.notices import *
 from noticeboard.models import *
 
 
@@ -26,15 +20,14 @@ def user_allowed_banners(roles, person):
     """
 
     banner_ids = []
-    if roles:
-        for role in roles.values():
-            role_object = role['instance']
-            role_content_type = ContentType.objects.get_for_model(role_object)
+    for role in roles.values():
+        role_object = role['instance']
+        role_content_type = ContentType.objects.get_for_model(role_object)
 
-            banner_ids += Permissions.objects.filter(
-                persona_object_id=role_object.id,
-                persona_content_type=role_content_type
-            ).values_list('banner_id', flat=True)
+        banner_ids += Permissions.objects.filter(
+            persona_object_id=role_object.id,
+            persona_content_type=role_content_type
+        ).values_list('banner_id', flat=True)
 
     return banner_ids
 
@@ -50,7 +43,7 @@ def get_drafted_notices(request):
 
     queryset = Notice.objects.filter(
         is_draft=True,
-        banner_id__in=allowed_banner_ids)
+        banner_id__in=allowed_banner_ids).order_by('-datetime_modified')
     return queryset
 
 
@@ -63,11 +56,12 @@ class NoticeViewSet(viewsets.ModelViewSet):
     2. 'keyword': Search keyword
     """
 
+    permission_classes = [IsAuthenticated, ]
+
     def get_queryset(self):
 
         notice_class = self.request.query_params.get('class', None)
         keyword = self.request.query_params.get('keyword', None)
-        search_vector = SearchVector('title', 'content')
 
         if self.action == 'create':
             queryset = Notice.objects.all()
@@ -78,13 +72,15 @@ class NoticeViewSet(viewsets.ModelViewSet):
             """
 
             if notice_class == 'draft':
-                queryset = get_drafted_notices(self.request)
+                queryset = get_drafted_notices(self.request).order_by('-datetime_modified')
             elif keyword:
+                search_vector = SearchVector('title', 'content')
                 queryset = Notice.objects.annotate(
                     search=search_vector
                 ).filter(search=keyword).filter(is_draft=False)
+
             else:
-                queryset = Notice.objects.filter(is_draft=False)
+                queryset = Notice.objects.filter(is_draft=False).order_by('-datetime_modified')
 
         elif self.action in ['retrieve', 'update']:
             """
@@ -103,6 +99,7 @@ class NoticeViewSet(viewsets.ModelViewSet):
         request
         :return: the serializer class
         """
+
         if self.action == 'list':
             return NoticeListSerializer
         elif self.action == 'retrieve':
@@ -162,17 +159,18 @@ class ExpiredNoticeViewSet(viewsets.ModelViewSet):
     """
 
     lookup_field = 'notice_id'
+    permission_classes = [IsAuthenticated, ]
 
     def get_queryset(self):
         keyword = self.request.query_params.get('keyword', None)
-        search_vector = SearchVector('title', 'content')
 
         if keyword:
+            search_vector = SearchVector('title', 'content')
             queryset = ExpiredNotice.objects.annotate(
                 search=search_vector
             ).filter(search=keyword).filter(is_draft=False)
         else:
-            queryset = ExpiredNotice.objects.filter(is_draft=False)
+            queryset = ExpiredNotice.objects.filter(is_draft=False).order_by('datetime_modified')
         return queryset
 
     def get_serializer_class(self):

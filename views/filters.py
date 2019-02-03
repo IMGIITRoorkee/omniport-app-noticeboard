@@ -1,11 +1,12 @@
 from rest_framework.views import APIView
 from rest_framework import viewsets
-from django.shortcuts import get_object_or_404
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
 from django.http import Http404
 from django.contrib.postgres.search import SearchVector
 
+from categories.models import Category
 from noticeboard.serializers import (
     BannerSerializer,
     MainCategorySerializer,
@@ -13,7 +14,6 @@ from noticeboard.serializers import (
 )
 from noticeboard.models import (
     Notice,
-    MainCategory,
     Banner,
     User
 )
@@ -21,11 +21,14 @@ from noticeboard.models import (
 
 class FilterListViewSet(viewsets.ReadOnlyModelViewSet):
     """
-    This view fetches all the main categories and their banners
+    This view fetches the category tree for noticeboard and the 
+    corresponding child banners
     """
 
     serializer_class = MainCategorySerializer
-    queryset = MainCategory.objects.all()
+    queryset = Category.objects.get(slug='noticeboard').get_children()
+    pagination_class = None
+    permission_classes = [IsAuthenticated, ]
 
 
 def filter_search(data, queryset):
@@ -35,8 +38,12 @@ def filter_search(data, queryset):
 
     if 'keyword' in data:
         search_vector = SearchVector('title', 'content')
+
+        # In search the queryset won't be ordered by datetime 
         queryset = queryset.annotate(search=search_vector).filter(
             search=data['keyword']).filter(is_draft=False)
+    else:
+        queryset = queryset.order_by('-datetime_modified')
     return queryset
 
 
@@ -50,8 +57,9 @@ class FilterViewSet(viewsets.ReadOnlyModelViewSet):
     """
 
     serializer_class = NoticeListSerializer
+    permission_classes = [IsAuthenticated, ]
 
-    def get_object(self, pk):
+    def get_banner_object(self, pk):
         try:
             return Banner.objects.get(pk=pk)
         except Banner.DoesNotExist:
@@ -61,7 +69,7 @@ class FilterViewSet(viewsets.ReadOnlyModelViewSet):
         data = self.request.query_params
 
         banner_id = data.get('banner', None)
-        banner_object = self.get_object(banner_id)
+        banner_object = self.get_banner_object(banner_id)
 
         queryset = Notice.objects.filter(banner=banner_object)
         queryset = filter_search(data, queryset)
@@ -81,8 +89,9 @@ class DateFilterViewSet(viewsets.ReadOnlyModelViewSet):
     """
 
     serializer_class = NoticeListSerializer
+    permission_classes = [IsAuthenticated, ]
 
-    def get_object(self, pk):
+    def get_banner_object(self, pk):
         try:
             return Banner.objects.get(pk=pk)
         except Banner.DoesNotExist:
@@ -101,7 +110,7 @@ class DateFilterViewSet(viewsets.ReadOnlyModelViewSet):
         # Filter corresponding to a banner
         banner_id = data.get('banner', None)
         if banner_id:
-            banner_object = self.get_object(banner_id)
+            banner_object = self.get_banner_object(banner_id)
             queryset = queryset.filter(banner=banner_object)
 
         # Search
@@ -115,13 +124,11 @@ class StarFilterViewSet(viewsets.ReadOnlyModelViewSet):
     """
 
     serializer_class = NoticeListSerializer
+    permission_classes = [IsAuthenticated, ]
 
     def get_queryset(self):
         person = self.request.person
 
-        if person:
-            notice_user, created = User.objects.get_or_create(person=person)
-            queryset = notice_user.starred_notices.all()
-        else:
-            queryset = Notice.objects.none()
+        notice_user, created = User.objects.get_or_create(person=person)
+        queryset = notice_user.starred_notices.all().order_by('-datetime_modified')
         return queryset

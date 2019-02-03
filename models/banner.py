@@ -27,17 +27,22 @@ class Banner(Model):
         max_length=63,
     )
 
-    main_category = models.ForeignKey(
-        to='MainCategory',
+    category_node = models.OneToOneField(
+        to='categories.Category',
         on_delete=models.CASCADE,
-    )
+        related_name='noticeboard_banner'
+    )        
 
     class Meta:
         """
         Meta class for Banner
         """
 
-        unique_together = (('main_category', 'entity_content_type', 'entity_object_id'),)
+        unique_together = ((
+            'category_node',
+            'entity_content_type',
+            'entity_object_id'
+        ),)
 
     def __str__(self):
         """
@@ -47,33 +52,5 @@ class Banner(Model):
 
         entity = self.entity
         name = self.name
-        main_category = self.main_category
 
-        return f'{name}: {entity}, {main_category}'
-
-
-class MainCategory(Model):
-    """
-    This class holds information about the main category
-    """
-
-    name = models.CharField(
-        max_length=31,
-    )
-
-    class Meta:
-        """
-        Meta class for MainCategory
-        """
-
-        verbose_name_plural = 'main categories'
-
-    def __str__(self):
-        """
-        Return the string representation of the model
-        :return: the string representation of the model
-        """
-
-        name = self.name
-
-        return f'{name}'
+        return f'{name}: {entity}'

@@ -10,5 +10,4 @@ from noticeboard.models.permissions import (
 )
 from noticeboard.models.banner import (
     Banner,
-    MainCategory,
 )

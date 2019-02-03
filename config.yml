@@ -1,7 +1,18 @@
 nomenclature:
   name: noticeboard
-  verboseName: Notice Board
+  verboseName: Noticeboard
 baseUrls:
   http: noticeboard/
   ws: noticeboard/
-  isApi: true
+isApi: true
+acceptables:
+  roles:
+  - name: Student
+    activeStatuses:
+    - IS_ACTIVE
+    - HAS_BEEN_ACTIVE
+categories:
+  - name: Department
+    slug: department
+  - name: Authorities
+    slug: authorities

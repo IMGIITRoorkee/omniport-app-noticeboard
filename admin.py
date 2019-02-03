@@ -1,13 +1,6 @@
-from kernel.admin.site import omnipotence
+from omniport.admin.site import omnipotence
 
-from noticeboard.models import (
-    Notice,
-    ExpiredNotice,
-    User,
-    Permissions,
-    Banner,
-    MainCategory,
-)
+from noticeboard.models import *
 
 # Register all models
 
@@ -20,4 +13,3 @@ omnipotence.register(User)
 
 omnipotence.register(Permissions)
 omnipotence.register(Banner)
-omnipotence.register(MainCategory)

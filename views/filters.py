@@ -47,19 +47,37 @@ class FilterViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = NoticeListSerializer
     permission_classes = [IsAuthenticated, ]
 
-    def get_banner_object(self, pk):
+    def get_banner_object_from_id(self, pk):
         try:
             return Banner.objects.get(pk=pk)
         except Banner.DoesNotExist:
+            raise Http404
+
+    def get_category_object_from_slug(self, main_category_slug):
+        try:
+            return Category.objects.get(slug=main_category_slug)
+        except Category.DoesNotExist:
             raise Http404
 
     def get_queryset(self):
         data = self.request.query_params
 
         banner_id = data.get('banner', None)
-        banner_object = self.get_banner_object(banner_id)
+        main_category_slug = data.get('main_category', None)
 
-        queryset = Notice.objects.filter(banner=banner_object)
+        # Filter corresponding to a banner or main category of banners
+        if banner_id:
+            banner_object = self.get_banner_object_from_id(banner_id)
+            queryset = Notice.objects.filter(banner=banner_object)
+
+        elif main_category_slug:
+            category_nodes = self.get_category_object_from_slug(main_category_slug).get_children()
+
+            banners = Banner.objects.filter(category_node__in=category_nodes)
+            queryset = Notice.objects.filter(banner__in=banners)
+        else:
+            raise Http404
+
         queryset = filter_search(data, queryset)
         return queryset
 
@@ -85,6 +103,12 @@ class DateFilterViewSet(viewsets.ReadOnlyModelViewSet):
         except Banner.DoesNotExist:
             raise Http404
 
+    def get_category_object_from_slug(self, main_category_slug):
+        try:
+            return Category.objects.get(slug=main_category_slug)
+        except Category.DoesNotExist:
+            raise Http404
+
     def get_queryset(self):
         data = self.request.query_params
 
@@ -100,11 +124,19 @@ class DateFilterViewSet(viewsets.ReadOnlyModelViewSet):
             end_date
         ))
 
-        # Filter corresponding to a banner
+        # Filter corresponding to a banner or main category of banners
         banner_id = data.get('banner', None)
+        main_category_slug = data.get('main_category', None)
+
         if banner_id:
             banner_object = self.get_banner_object(banner_id)
             queryset = queryset.filter(banner=banner_object)
+
+        elif main_category_slug:
+            category_nodes = self.get_category_object_from_slug(main_category_slug).get_children()
+
+            banners = Banner.objects.filter(category_node__in=category_nodes)
+            queryset = queryset.filter(banner__in=banners)
 
         # Search
         queryset = filter_search(data, queryset)

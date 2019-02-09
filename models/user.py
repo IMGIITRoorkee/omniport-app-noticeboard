@@ -7,7 +7,7 @@ from kernel.models.root import Model
 from noticeboard.models import Notice
 
 
-class User(Model):
+class NoticeUser(Model):
     """
     This class holds information about a user
     """

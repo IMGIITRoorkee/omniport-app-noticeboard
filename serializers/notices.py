@@ -2,7 +2,7 @@ import swapper
 
 from rest_framework import serializers
 from kernel.serializers.root import ModelSerializer
-from noticeboard.models import Notice, ExpiredNotice, User
+from noticeboard.models import Notice, ExpiredNotice, NoticeUser, Banner
 from noticeboard.serializers import BannerSerializer
 
 
@@ -33,7 +33,7 @@ class NoticeDetailSerializer(ModelSerializer):
     Serializer for Notice object
     """
 
-    banner = BannerSerializer()
+    banner = BannerSerializer(read_only=True)
     read = serializers.SerializerMethodField('is_read')
     starred = serializers.SerializerMethodField('is_starred')
 
@@ -45,7 +45,7 @@ class NoticeDetailSerializer(ModelSerializer):
     def is_read(self, obj):    
         person = self.context['request'].person
 
-        notice_user, created = User.objects.get_or_create(person=person)
+        notice_user, created = NoticeUser.objects.get_or_create(person=person)
         read_notices = notice_user.read_notices.all()
 
         return read_notices.filter(id=obj.id).exists()
@@ -53,7 +53,7 @@ class NoticeDetailSerializer(ModelSerializer):
     def is_starred(self, obj):
         person = self.context['request'].person
 
-        notice_user, created = User.objects.get_or_create(person=person)
+        notice_user, created = NoticeUser.objects.get_or_create(person=person)
         starred_notices = notice_user.starred_notices.all()
 
         return starred_notices.filter(id=obj.id).exists()

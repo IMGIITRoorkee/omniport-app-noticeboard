@@ -33,7 +33,7 @@ star_filter_view = StarFilterViewSet.as_view({
     'get': 'list'
 })
 
-permissions = PersonPermissionViewSet.as_view({
+permissions = BannerPermissionViewSet.as_view({
     'get': 'list'
 })
 

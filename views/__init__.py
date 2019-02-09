@@ -12,5 +12,5 @@ from noticeboard.views.filters import (
     StarFilterViewSet,
 )
 from noticeboard.views.permissions import (
-    PersonPermissionViewSet,
+    BannerPermissionViewSet,
 )

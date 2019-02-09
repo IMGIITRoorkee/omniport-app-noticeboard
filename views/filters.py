@@ -1,8 +1,11 @@
+import datetime
+
 from rest_framework.views import APIView
 from rest_framework import viewsets
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
+
 from django.http import Http404
 from django.contrib.postgres.search import SearchVector
 
@@ -12,10 +15,11 @@ from noticeboard.serializers import (
     MainCategorySerializer,
     NoticeListSerializer,
 )
+from noticeboard.utils.filters import filter_search
 from noticeboard.models import (
     Notice,
     Banner,
-    User
+    NoticeUser
 )
 
 
@@ -29,22 +33,6 @@ class FilterListViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Category.objects.get(slug='noticeboard').get_children()
     pagination_class = None
     permission_classes = [IsAuthenticated, ]
-
-
-def filter_search(data, queryset):
-    """
-    Check if a search is applied in a filtered result
-    """
-
-    if 'keyword' in data:
-        search_vector = SearchVector('title', 'content')
-
-        # In search the queryset won't be ordered by datetime 
-        queryset = queryset.annotate(search=search_vector).filter(
-            search=data['keyword']).filter(is_draft=False)
-    else:
-        queryset = queryset.order_by('-datetime_modified')
-    return queryset
 
 
 class FilterViewSet(viewsets.ReadOnlyModelViewSet):
@@ -102,6 +90,11 @@ class DateFilterViewSet(viewsets.ReadOnlyModelViewSet):
 
         # Filter corresponding to a date
         start_date, end_date = data.get('start', None), data.get('end', None)
+
+        start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d').date()
+        end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d').date()
+        end_date = datetime.datetime.combine(end_date, datetime.time.max)
+
         queryset = Notice.objects.filter(datetime_created__range=(
             start_date,
             end_date
@@ -129,6 +122,6 @@ class StarFilterViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         person = self.request.person
 
-        notice_user, created = User.objects.get_or_create(person=person)
+        notice_user, created = NoticeUser.objects.get_or_create(person=person)
         queryset = notice_user.starred_notices.all().order_by('-datetime_modified')
         return queryset

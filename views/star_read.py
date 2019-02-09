@@ -3,12 +3,13 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
 from rest_framework.exceptions import NotFound
+
 from django.http import Http404
 
 from noticeboard.models import (
     Notice,
     ExpiredNotice,
-    User,
+    NoticeUser,
 )
 
 
@@ -31,7 +32,7 @@ class StarReadNotices(APIView):
         keyword: str  (unread, read, starred, unstarred)
         """
 
-        notice_user, created = User.objects.get_or_create(person=request.person)
+        notice_user, created = NoticeUser.objects.get_or_create(person=request.person)
         data = request.data
 
         if 'notices' not in data.keys() or 'keyword' not in data.keys():

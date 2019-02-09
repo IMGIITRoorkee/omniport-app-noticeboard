@@ -9,7 +9,7 @@ from noticeboard.models import *
 omnipotence.register(Notice)
 omnipotence.register(ExpiredNotice)
 
-omnipotence.register(User)
+omnipotence.register(NoticeUser)
 
 omnipotence.register(Permissions)
 omnipotence.register(Banner)

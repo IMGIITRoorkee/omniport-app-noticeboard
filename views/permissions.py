@@ -2,6 +2,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import viewsets
 from rest_framework import status
+
 from django.http import Http404
 from django.contrib.contenttypes.models import ContentType
 
@@ -13,7 +14,7 @@ from noticeboard.models import (
 )
 
 
-class PersonPermissionViewSet(viewsets.ReadOnlyModelViewSet):
+class BannerPermissionViewSet(viewsets.ReadOnlyModelViewSet):
     """
     This view fetches all the banner permissions of a person
     """

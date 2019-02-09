@@ -3,7 +3,7 @@ from noticeboard.models.notice import (
     ExpiredNotice,
 )
 from noticeboard.models.user import (
-    User,
+    NoticeUser,
 )
 from noticeboard.models.permissions import (
     Permissions,

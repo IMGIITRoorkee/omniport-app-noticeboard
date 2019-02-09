@@ -1,50 +1,19 @@
-from rest_framework import viewsets
 from django.db.models import Q
+from django.http import Http404
+from django.contrib.postgres.search import SearchVector
+
 from rest_framework.decorators import action
+from rest_framework import viewsets
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
-from django.http import Http404
-from django.contrib.contenttypes.models import ContentType
-from django.contrib.postgres.search import SearchVector
 
+from noticeboard.utils.notices import (
+    user_allowed_banners,
+    get_drafted_notices
+)
 from noticeboard.serializers.notices import *
 from noticeboard.models import *
-
-
-def user_allowed_banners(roles, person):
-    """
-    Given a user, return all the allowed banners.
-
-    This view handles the permissions of a user under a particular banner
-    """
-
-    banner_ids = []
-    for role in roles.values():
-        role_object = role['instance']
-        role_content_type = ContentType.objects.get_for_model(role_object)
-
-        banner_ids += Permissions.objects.filter(
-            persona_object_id=role_object.id,
-            persona_content_type=role_content_type
-        ).values_list('banner_id', flat=True)
-
-    return banner_ids
-
-
-def get_drafted_notices(request):
-    """
-    Corresponding to a person, this function checks all the allowed banners
-    and gets all the notices drafted according to those banners
-    """
-
-    person, roles = request.person, request.roles
-    allowed_banner_ids = user_allowed_banners(roles, person)
-
-    queryset = Notice.objects.filter(
-        is_draft=True,
-        banner_id__in=allowed_banner_ids).order_by('-datetime_modified')
-    return queryset
 
 
 class NoticeViewSet(viewsets.ModelViewSet):
@@ -72,7 +41,8 @@ class NoticeViewSet(viewsets.ModelViewSet):
             """
 
             if notice_class == 'draft':
-                queryset = get_drafted_notices(self.request).order_by('-datetime_modified')
+                queryset = get_drafted_notices(self.request)
+
             elif keyword:
                 search_vector = SearchVector('title', 'content')
                 queryset = Notice.objects.annotate(
@@ -109,7 +79,6 @@ class NoticeViewSet(viewsets.ModelViewSet):
         elif self.action == 'update':
             return NoticeUpdateSerializer
 
-    @action(methods=['post'], detail=True)
     def create(self, request, format=None):
 
         person, roles = request.person, request.roles
@@ -126,10 +95,9 @@ class NoticeViewSet(viewsets.ModelViewSet):
                 serializer.save()
                 return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-            return Response(serializer.data, status=status.HTTP_401_UNAUTHORIZED)
-        return Response(serializer.data, status=status.HTTP_400_BAD_REQUEST)
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
+        return Response(status=status.HTTP_400_BAD_REQUEST)
 
-    @action(methods=['put'], detail=True)
     def update(self, request, pk, format=None):
 
         notice = self.get_object()
@@ -146,8 +114,8 @@ class NoticeViewSet(viewsets.ModelViewSet):
                 serializer.save()
                 return Response(serializer.data, status=status.HTTP_200_OK)
 
-            return Response(serializer.data, status=status.HTTP_401_UNAUTHORIZED)
-        return Response(serializer.data, status=status.HTTP_400_BAD_REQUEST)
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
+        return Response(status=status.HTTP_400_BAD_REQUEST)
 
 
 class ExpiredNoticeViewSet(viewsets.ModelViewSet):

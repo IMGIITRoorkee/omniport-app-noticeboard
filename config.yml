@@ -11,6 +11,10 @@ acceptables:
     activeStatuses:
     - IS_ACTIVE
     - HAS_BEEN_ACTIVE
+  - name: Faculty    
+    activeStatuses:
+    - IS_ACTIVE
+    - HAS_BEEN_ACTIVE
 categories:
   - name: Department
     slug: department

@@ -4,6 +4,7 @@ nomenclature:
 baseUrls:
   http: noticeboard/
   ws: noticeboard/
+  static: noticeboard/
 isApi: true
 acceptables:
   roles:

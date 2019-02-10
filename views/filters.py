@@ -30,7 +30,10 @@ class FilterListViewSet(viewsets.ReadOnlyModelViewSet):
     """
 
     serializer_class = MainCategorySerializer
-    queryset = Category.objects.get(slug='noticeboard').get_children()
+    try:
+        queryset = Category.objects.get(slug='noticeboard').get_children()
+    except Exception:
+        queryset = Category.objects.none()
     pagination_class = None
     permission_classes = [IsAuthenticated, ]
 

@@ -30,11 +30,11 @@ print(noticeboard_department)
 for department in Department.objects.all():
     try:
         category_node = Category.objects.get(
-            slug=department.code
+            slug='noticeboard__'+department.code
         )
     except Category.DoesNotExist:
         category_node = Category.objects.create(
-            slug=department.code,
+            slug='noticeboard__' + department.code,
             name=department.name,
             parent=noticeboard_department
         )

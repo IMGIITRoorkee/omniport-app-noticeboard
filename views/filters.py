@@ -158,5 +158,8 @@ class StarFilterViewSet(viewsets.ReadOnlyModelViewSet):
         person = self.request.person
 
         notice_user, created = NoticeUser.objects.get_or_create(person=person)
-        queryset = notice_user.starred_notices.all().order_by('-datetime_modified')
+        try:
+            queryset = notice_user.starred_notices.all().order_by('-datetime_modified')
+        except Exception:
+            queryset = Notice.objects.none()
         return queryset

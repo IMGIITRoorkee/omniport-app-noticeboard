@@ -13,7 +13,7 @@ try:
     noticeboard_parent = Category.objects.get(slug='noticeboard')       
 except Category.DoesNotExist:
     noticeboard_parent = Category.objects.create(
-        Name='Noticeboard',
+        name='Noticeboard',
         slug='noticeboard'
     ).save()
 

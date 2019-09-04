@@ -12,7 +12,7 @@ class BannerSerializer(ModelSerializer):
     Serializer for Banner object
     """
 
-    category_node = serializers.PrimaryKeyRelatedField(many=False, read_only=True)
+    category_node = CategorySerializer(many=False, read_only=True)
 
     class Meta:
         model = Banner
@@ -26,7 +26,7 @@ class MainCategorySerializer(CategorySerializer):
 
     def to_representation(self, instance):
         """
-        Overwrite the to_represention of CategorySerializer
+        Overwrite the to_representation of CategorySerializer
         """
 
         representation = super().to_representation(instance)

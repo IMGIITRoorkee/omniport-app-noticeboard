@@ -2,6 +2,8 @@ import swapper
 
 from rest_framework import serializers
 from formula_one.serializers.base import ModelSerializer
+from categories.models import UserSubscription
+
 from noticeboard.models import Notice, ExpiredNotice, NoticeUser, Banner
 from noticeboard.serializers import BannerSerializer
 
@@ -15,7 +17,7 @@ class NoticeSerializer(ModelSerializer):
 
     class Meta:
         model = Notice
-        exclude = ()
+        fields = '__all__'
 
     def create(self, validated_data):
         """
@@ -25,6 +27,20 @@ class NoticeSerializer(ModelSerializer):
         banner_data = validated_data.pop('banner')
         banner = Banner.objects.get(**banner_data)
         notice = Notice.objects.create(**validated_data, banner=banner)
+        if notice.send_email:
+            if notice.is_important:
+                # send email to all people
+                # People = swapper.load_model('kernel', 'Person')
+                # people = Person.objects.all().values_list('id', flat=True)
+                pass
+            else:
+                # send email to subscribed people
+                people = UserSubscription.objects.filter(
+                    category=notice.banner.category_node,
+                    action='email',
+                ).values_list('person_id', flat=True)
+            # TODO send email to all ids in list 'people'
+            # send_email_to(people, notice.content)
         return notice
 
 
@@ -40,7 +56,8 @@ class NoticeDetailSerializer(ModelSerializer):
     class Meta:
         model = Notice
         fields = ('id', 'title', 'datetime_modified', 'content',
-                  'is_draft', 'is_edited', 'banner', 'read', 'starred')
+                  'is_draft', 'is_edited', 'is_important',
+                  'banner', 'read', 'starred')
 
     def is_read(self, obj):    
         person = self.context['request'].person
@@ -64,7 +81,9 @@ class NoticeListSerializer(NoticeDetailSerializer):
     Serializer for Notice object in list form
     """
 
-    excluded_fields = ('content',)
+    class Meta:
+        model = Notice
+        exclude = ['content']
 
 
 class NoticeUpdateSerializer(ModelSerializer):
@@ -88,7 +107,8 @@ class ExpiredNoticeDetailSerializer(ModelSerializer):
 
     class Meta:
         model = ExpiredNotice
-        fields = ('id', 'title', 'banner', 'datetime_modified', 'content')
+        fields = ('id', 'title', 'banner',
+                  'is_important', 'datetime_modified', 'content')
 
 
 class ExpiredNoticeListSerializer(ExpiredNoticeDetailSerializer):
@@ -96,4 +116,6 @@ class ExpiredNoticeListSerializer(ExpiredNoticeDetailSerializer):
     Serializer for Expired Notice object in list form
     """
 
-    excluded_fields = ('content',)
+    class Meta:
+        model = Notice
+        exclude = ['content']

@@ -3,7 +3,6 @@ from django.contrib.contenttypes.models import ContentType
 from django.contrib.contenttypes.fields import GenericForeignKey
 
 from formula_one.models.base import Model
-from noticeboard.models.banner import Banner
 
 
 class Permissions(Model):
@@ -20,16 +19,17 @@ class Permissions(Model):
         on_delete=models.CASCADE,
     )
     persona_object_id = models.PositiveIntegerField()
-
     persona = GenericForeignKey(
         ct_field='persona_content_type',
         fk_field='persona_object_id',
     )
-
-    # Personas are mapped to models like Departments, Bhawans etc.
+    # Banner is mapped to models like Departments, Bhawans etc.
     banner = models.ForeignKey(
         to='Banner',
         on_delete=models.CASCADE,
+    )
+    is_super_uploader = models.BooleanField(
+        default=False,
     )
 
     class Meta:

@@ -3,7 +3,6 @@ from django.contrib.contenttypes.models import ContentType
 from noticeboard.models import Permissions, Notice
 
 
-
 def user_allowed_banners(roles, person):
     """
     Given a user, return all the allowed banners.

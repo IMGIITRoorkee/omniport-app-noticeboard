@@ -15,4 +15,4 @@ class PermissionsSerializer(ModelSerializer):
 
     class Meta:
         model = Permissions
-        fields = ('banner',)
+        fields = ('banner', 'is_super_uploader')

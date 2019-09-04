@@ -31,6 +31,8 @@ class NoticeViewSet(viewsets.ModelViewSet):
 
         notice_class = self.request.query_params.get('class', None)
         keyword = self.request.query_params.get('keyword', None)
+        important_only = self.request.query_params.get('important', False)
+        unread_only = self.request.query_params.get('unread', False)
 
         if self.action == 'create':
             queryset = Notice.objects.all()
@@ -60,6 +62,21 @@ class NoticeViewSet(viewsets.ModelViewSet):
             drafted_notices = get_drafted_notices(self.request)
             all_notices = Notice.objects.filter(is_draft=False)
             queryset = (all_notices | drafted_notices).distinct()
+
+        if important_only:
+            """
+            Send only important notices
+            """
+            queryset = queryset.filter(
+                is_important=True
+            )
+        if unread_only:
+            """
+            Send only unread notices
+            """
+            queryset = queryset.exclude(
+                read_notice_set__person=self.request.person
+            )
 
         return queryset
 

@@ -14,7 +14,7 @@ class AbstractNotice(Model):
     This abstract model is inherited by Notice and ExpiredNotice
     models
 
-    This class holds general informations about a notice.
+    This class holds general information about a notice.
     """
 
     title = models.CharField(
@@ -40,6 +40,10 @@ class AbstractNotice(Model):
     )
 
     is_edited = models.BooleanField(
+        default=False,
+    )
+
+    is_important = models.BooleanField(
         default=False,
     )
 

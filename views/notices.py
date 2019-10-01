@@ -1,12 +1,9 @@
-from django.db.models import Q
-from django.http import Http404
 from django.contrib.postgres.search import SearchVector
 
-from rest_framework.decorators import action
 from rest_framework import viewsets
+from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from rest_framework import status
 
 from noticeboard.utils.notices import (
     user_allowed_banners,
@@ -34,6 +31,8 @@ class NoticeViewSet(viewsets.ModelViewSet):
         important_only = self.request.query_params.get('important', False)
         unread_only = self.request.query_params.get('unread', False)
 
+        queryset = Notice.objects.none()
+
         if self.action == 'create':
             queryset = Notice.objects.all()
 
@@ -52,7 +51,8 @@ class NoticeViewSet(viewsets.ModelViewSet):
                 ).filter(search=keyword).filter(is_draft=False)
 
             else:
-                queryset = Notice.objects.filter(is_draft=False).order_by('-datetime_modified')
+                queryset = Notice.objects.filter(is_draft=False).order_by(
+                    '-datetime_modified')
 
         elif self.action in ['retrieve', 'update']:
             """
@@ -116,7 +116,6 @@ class NoticeViewSet(viewsets.ModelViewSet):
         return Response(status=status.HTTP_400_BAD_REQUEST)
 
     def update(self, request, pk, format=None):
-
         notice = self.get_object()
         person, roles = request.person, request.roles
 
@@ -155,7 +154,8 @@ class ExpiredNoticeViewSet(viewsets.ModelViewSet):
                 search=search_vector
             ).filter(search=keyword).filter(is_draft=False)
         else:
-            queryset = ExpiredNotice.objects.filter(is_draft=False).order_by('datetime_modified')
+            queryset = ExpiredNotice.objects.filter(is_draft=False).order_by(
+                'datetime_modified')
         return queryset
 
     def get_serializer_class(self):

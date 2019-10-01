@@ -31,18 +31,16 @@ class Banner(Model):
         to='categories.Category',
         on_delete=models.CASCADE,
         related_name='noticeboard_banner'
-    )        
+    )
 
     class Meta:
         """
         Meta class for Banner
         """
 
-        unique_together = ((
-            'category_node',
-            'entity_content_type',
-            'entity_object_id'
-        ),)
+        unique_together = (
+            ('category_node', 'entity_content_type', 'entity_object_id'),
+        )
 
     def __str__(self):
         """

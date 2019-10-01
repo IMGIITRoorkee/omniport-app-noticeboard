@@ -1,10 +1,6 @@
-from rest_framework.response import Response
+from django.contrib.contenttypes.models import ContentType
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import viewsets
-from rest_framework import status
-
-from django.http import Http404
-from django.contrib.contenttypes.models import ContentType
 
 from noticeboard.serializers import (
     PermissionsSerializer,

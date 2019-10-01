@@ -1,5 +1,3 @@
-import swapper
-
 from rest_framework import serializers
 from formula_one.serializers.base import ModelSerializer
 from categories.models import UserSubscription
@@ -59,7 +57,7 @@ class NoticeDetailSerializer(ModelSerializer):
                   'is_draft', 'is_edited', 'is_important',
                   'banner', 'read', 'starred')
 
-    def is_read(self, obj):    
+    def is_read(self, obj):
         person = self.context['request'].person
 
         notice_user, created = NoticeUser.objects.get_or_create(person=person)

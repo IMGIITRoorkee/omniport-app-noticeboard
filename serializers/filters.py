@@ -1,7 +1,3 @@
-import swapper
-
-from rest_framework import serializers
-
 from formula_one.serializers.base import ModelSerializer
 from categories.serializers import CategorySerializer
 from noticeboard.models import Banner

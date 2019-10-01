@@ -1,7 +1,6 @@
 from django.conf.urls import url
 from noticeboard.views import *
 
-
 notice_list = NoticeViewSet.as_view({
     'get': 'list',
     'post': 'create'

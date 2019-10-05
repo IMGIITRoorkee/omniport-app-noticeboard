@@ -26,7 +26,7 @@ class AbstractNotice(Model):
         on_delete=models.CASCADE,
     )
 
-    expiry_date = models.DateTimeField()
+    expiry_date = models.DateField()
 
     send_email = models.BooleanField(
         default=False,

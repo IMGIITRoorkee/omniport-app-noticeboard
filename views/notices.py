@@ -48,7 +48,13 @@ class NoticeViewSet(viewsets.ModelViewSet):
                 search_vector = SearchVector('title', 'content')
                 queryset = Notice.objects.annotate(
                     search=search_vector
-                ).filter(search=keyword).filter(is_draft=False)
+                ).filter(
+                    search__icontains=keyword
+                ).filter(
+                    is_draft=False
+                ).order_by(
+                    '-datetime_modified'
+                )
 
             else:
                 queryset = Notice.objects.filter(is_draft=False).order_by(

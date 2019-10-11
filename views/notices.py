@@ -1,4 +1,4 @@
-from django.contrib.postgres.search import SearchVector
+from django.contrib.postgres.search import SearchVector, SearchQuery
 
 from rest_framework import viewsets
 from rest_framework import status
@@ -50,7 +50,7 @@ class NoticeViewSet(viewsets.ModelViewSet):
                 queryset = Notice.objects.annotate(
                     search=search_vector
                 ).filter(
-                    search__icontains=keyword
+                    search=SearchQuery(keyword)
                 ).filter(
                     is_draft=False
                 ).order_by(

@@ -52,3 +52,7 @@ class Banner(Model):
         name = self.name
 
         return f'{name}: {entity}'
+
+    @property
+    def parent_category(self):
+        return self.category_node.parent

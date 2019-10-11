@@ -9,10 +9,11 @@ class BannerSerializer(ModelSerializer):
     """
 
     category_node = CategorySerializer(many=False, read_only=True)
+    parent_category = CategorySerializer(many=False, read_only=True)
 
     class Meta:
         model = Banner
-        fields = ('id', 'name', 'category_node')
+        fields = ('id', 'name', 'category_node', 'parent_category')
 
 
 class MainCategorySerializer(CategorySerializer):

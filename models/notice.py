@@ -1,5 +1,6 @@
 import datetime
 
+import swapper
 from django.db import models
 from tinymce.models import HTMLField
 
@@ -13,6 +14,12 @@ class AbstractNotice(Model):
 
     This class holds general information about a notice.
     """
+
+    uploader = models.ForeignKey(
+        to=swapper.get_model_name('kernel', 'Person'),
+        related_name='uploaded_notices',
+        on_delete=models.CASCADE,
+    )
 
     title = models.CharField(
         max_length=255,
@@ -100,4 +107,10 @@ class ExpiredNotice(AbstractNotice):
 
     notice_id = models.BigIntegerField(
         primary_key=True,
+    )
+
+    uploader = models.ForeignKey(
+        to=swapper.get_model_name('kernel', 'Person'),
+        related_name='uploaded_notices_expired',
+        on_delete=models.CASCADE,
     )

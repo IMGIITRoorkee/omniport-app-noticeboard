@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from omniport.utils import switcher
 from formula_one.serializers.base import ModelSerializer
 from categories.models import UserSubscription
 
@@ -6,16 +7,19 @@ from noticeboard.models import Notice, ExpiredNotice, NoticeUser, Banner
 from noticeboard.serializers import BannerSerializer
 
 
+AvatarSerializer = switcher.load_serializer('kernel', 'Person', 'Avatar')
+
+
 class NoticeSerializer(ModelSerializer):
     """
     Serializer for Notice object creation
     """
 
-    banner = BannerSerializer()
+    banner = BannerSerializer(fields=['id', 'name', 'category_node'])
 
     class Meta:
         model = Notice
-        fields = '__all__'
+        exclude = ['uploader']
 
     def create(self, validated_data):
         """
@@ -47,7 +51,10 @@ class NoticeDetailSerializer(ModelSerializer):
     Serializer for Notice object
     """
 
-    banner = BannerSerializer(read_only=True)
+    banner = BannerSerializer(
+        read_only=True, fields=['id', 'name', 'category_node']
+    )
+    uploader = AvatarSerializer(read_only=True, fields=['full_name'])
     read = serializers.SerializerMethodField('is_read')
     starred = serializers.SerializerMethodField('is_starred')
 
@@ -55,7 +62,7 @@ class NoticeDetailSerializer(ModelSerializer):
         model = Notice
         fields = ('id', 'title', 'datetime_modified', 'content',
                   'is_draft', 'is_edited', 'is_important',
-                  'banner', 'read', 'starred')
+                  'banner', 'read', 'starred', 'uploader')
 
     def is_read(self, obj):
         person = self.context['request'].person
@@ -100,13 +107,16 @@ class ExpiredNoticeDetailSerializer(ModelSerializer):
     Serializer for Expired Notice object
     """
 
-    banner = BannerSerializer(read_only=True)
+    banner = BannerSerializer(
+        read_only=True, fields=['id', 'name', 'category_node']
+    )
+    uploader = AvatarSerializer(read_only=True)
     id = serializers.IntegerField(source="notice_id")
 
     class Meta:
         model = ExpiredNotice
         fields = ('id', 'title', 'banner',
-                  'is_important', 'datetime_modified', 'content')
+                  'is_important', 'datetime_modified', 'content', 'uploader')
 
 
 class ExpiredNoticeListSerializer(ExpiredNoticeDetailSerializer):

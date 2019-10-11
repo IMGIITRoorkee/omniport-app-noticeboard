@@ -12,7 +12,7 @@ acceptables:
       activeStatuses:
         - IS_ACTIVE
         - HAS_BEEN_ACTIVE
-    - name: Faculty
+    - name: FacultyMember
       activeStatuses:
         - IS_ACTIVE
         - HAS_BEEN_ACTIVE

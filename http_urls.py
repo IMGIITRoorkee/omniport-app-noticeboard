@@ -45,4 +45,5 @@ urlpatterns = [
     url(r'date_filter_view/', date_filter_view),
     url(r'star_filter_view/', star_filter_view),
     url(r'permissions/', permissions),
+    url(r'copy_media/', CopyMedia.as_view(), name='copy_media'),
 ]

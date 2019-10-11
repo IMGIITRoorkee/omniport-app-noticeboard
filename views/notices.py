@@ -7,7 +7,8 @@ from rest_framework.permissions import IsAuthenticated
 
 from noticeboard.utils.notices import (
     user_allowed_banners,
-    get_drafted_notices
+    has_super_upload_right,
+    get_drafted_notices,
 )
 from noticeboard.serializers.notices import *
 from noticeboard.models import *
@@ -103,8 +104,7 @@ class NoticeViewSet(viewsets.ModelViewSet):
             return NoticeUpdateSerializer
 
     def create(self, request, format=None):
-
-        person, roles = request.person, request.roles
+        roles = request.roles
 
         data = request.data
         serializer = NoticeSerializer(data=data)
@@ -113,9 +113,15 @@ class NoticeViewSet(viewsets.ModelViewSet):
             banner_id = data['banner']['id']
 
             # Check if the user is authenticated to post under a banner
-            allowed_banner_ids = user_allowed_banners(roles, person)
+            allowed_banner_ids = user_allowed_banners(roles)
             if banner_id in allowed_banner_ids:
-                serializer.save()
+                if data.get('is_important', False):
+                    serializer.is_important = has_super_upload_right(
+                        roles,
+                        banner_id
+                    )
+                print(request.person)
+                serializer.save(uploader=request.person)
                 return Response(serializer.data, status=status.HTTP_201_CREATED)
 
             return Response(status=status.HTTP_401_UNAUTHORIZED)
@@ -123,17 +129,24 @@ class NoticeViewSet(viewsets.ModelViewSet):
 
     def update(self, request, pk, format=None):
         notice = self.get_object()
-        person, roles = request.person, request.roles
+        roles = request.roles
 
-        serializer = NoticeUpdateSerializer(notice, data=request.data)
+        data = request.data
+        serializer = NoticeUpdateSerializer(notice, data=data)
 
         if serializer.is_valid():
-            banner_id = notice.banner.id
+            banner_id = data['banner']['id']
 
-            # Check if the user is authenticated to post under a banner
-            allowed_banner_ids = user_allowed_banners(roles, person)
+            # Check if the user is authenticated to put under a banner
+            allowed_banner_ids = user_allowed_banners(roles)
             if banner_id in allowed_banner_ids:
-                serializer.save()
+                if data.get('is_important', False):
+                    serializer.is_important = has_super_upload_right(
+                        roles,
+                        banner_id
+                    )
+
+                serializer.save(uploader=request.person)
                 return Response(serializer.data, status=status.HTTP_200_OK)
 
             return Response(status=status.HTTP_401_UNAUTHORIZED)

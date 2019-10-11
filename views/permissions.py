@@ -17,6 +17,7 @@ class BannerPermissionViewSet(viewsets.ReadOnlyModelViewSet):
 
     serializer_class = PermissionsSerializer
     permission_classes = [IsAuthenticated, ]
+    pagination_class = None
 
     def get_queryset(self):
         person, roles = self.request.person, self.request.roles

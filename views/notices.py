@@ -139,7 +139,8 @@ class NoticeViewSet(viewsets.ModelViewSet):
 
             # Check if the user is authenticated to put under a banner
             allowed_banner_ids = user_allowed_banners(roles)
-            if banner_id in allowed_banner_ids:
+            if banner_id in allowed_banner_ids and \
+                    notice.uploader == request.person:
                 if data.get('is_important', False):
                     serializer.is_important = has_super_upload_right(
                         roles,

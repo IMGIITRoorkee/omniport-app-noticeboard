@@ -54,7 +54,7 @@ class NoticeDetailSerializer(ModelSerializer):
     banner = BannerSerializer(
         read_only=True, fields=['id', 'name', 'category_node']
     )
-    uploader = AvatarSerializer(read_only=True, fields=['full_name'])
+    uploader = AvatarSerializer(read_only=True, fields=['id', 'full_name'])
     read = serializers.SerializerMethodField('is_read')
     starred = serializers.SerializerMethodField('is_starred')
 
@@ -110,7 +110,7 @@ class ExpiredNoticeDetailSerializer(ModelSerializer):
     banner = BannerSerializer(
         read_only=True, fields=['id', 'name', 'category_node']
     )
-    uploader = AvatarSerializer(read_only=True)
+    uploader = AvatarSerializer(read_only=True, fields=['id', 'full_name'])
     id = serializers.IntegerField(source="notice_id")
 
     class Meta:

@@ -21,5 +21,7 @@ categorisation:
     slug: authorities
   - name: Departments
     slug: departments
+  - name: Centres
+    slug: centres
   - name: Bhawans
     slug: bhawans

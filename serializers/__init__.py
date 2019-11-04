@@ -9,7 +9,6 @@ from noticeboard.serializers.notices import (
     NoticeSerializer,
     NoticeDetailSerializer,
     NoticeListSerializer,
-    NoticeUpdateSerializer,
     ExpiredNoticeListSerializer,
     ExpiredNoticeDetailSerializer,
 )

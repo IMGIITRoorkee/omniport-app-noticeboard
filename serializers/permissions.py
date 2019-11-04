@@ -12,4 +12,15 @@ class PermissionsSerializer(ModelSerializer):
 
     class Meta:
         model = Permissions
-        fields = ('banner', 'is_super_uploader')
+        fields = ('banner', )
+
+    def to_representation(self, instance):
+        """
+
+        :param instance:
+        :return:
+        """
+        representation = super().to_representation(instance)
+        representation['banner']['is_super_uploader'] = \
+            instance.is_super_uploader
+        return representation

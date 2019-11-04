@@ -28,7 +28,6 @@ class CopyMedia(APIView):
         :param format:
         :return:
         """
-        print(request.data, Config.name)
         try:
             path = request.data['path'].strip('/')
             source = os.path.normpath(os.path.join(settings.PERSONAL_DIR, path))
@@ -37,7 +36,6 @@ class CopyMedia(APIView):
                 str(request.person.folder_user.folder_name())
             ))
 
-            print(source, authorized_pattern)
             if re.match(
                     pattern=f'^{authorized_pattern}/',
                     string=str(source),

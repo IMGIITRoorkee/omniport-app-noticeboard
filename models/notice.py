@@ -38,17 +38,17 @@ class AbstractNotice(Model):
     send_email = models.BooleanField(
         default=False,
     )
-
     is_draft = models.BooleanField(
         default=False,
     )
-
     is_edited = models.BooleanField(
         default=False,
     )
-
     is_important = models.BooleanField(
         default=False,
+    )
+    is_public = models.BooleanField(
+        default=True,
     )
 
     class Meta:
@@ -67,7 +67,7 @@ class AbstractNotice(Model):
         title = self.title
         banner = self.banner
 
-        return f'{title}: {banner}'
+        return f'{title} | {banner}'
 
     @property
     def notice_has_expired(self):

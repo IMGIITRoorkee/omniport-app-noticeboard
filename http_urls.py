@@ -7,7 +7,8 @@ notice_list = NoticeViewSet.as_view({
 })
 notice = NoticeViewSet.as_view({
     'get': 'retrieve',
-    'put': 'update'
+    'put': 'update',
+    'delete': 'destroy'
 })
 
 expired_notice_list = ExpiredNoticeViewSet.as_view({
@@ -15,6 +16,7 @@ expired_notice_list = ExpiredNoticeViewSet.as_view({
 })
 expired_notice = ExpiredNoticeViewSet.as_view({
     'get': 'retrieve',
+    'delete': 'destroy',
 })
 
 filter_list = FilterListViewSet.as_view({

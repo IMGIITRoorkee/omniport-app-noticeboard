@@ -47,5 +47,6 @@ class Permissions(Model):
 
         persona = self.persona
         banner = self.banner
+        is_super_uploader = self.is_super_uploader
 
-        return f'{persona}: {banner}'
+        return f'{persona} | {banner} {" | *" if is_super_uploader else ""}'

@@ -6,7 +6,6 @@ from categories.models import UserSubscription
 from noticeboard.models import Notice, ExpiredNotice, NoticeUser, Banner
 from noticeboard.serializers import BannerSerializer
 
-
 AvatarSerializer = switcher.load_serializer('kernel', 'Person', 'Avatar')
 
 
@@ -15,35 +14,13 @@ class NoticeSerializer(ModelSerializer):
     Serializer for Notice object creation
     """
 
-    banner = BannerSerializer(fields=['id', 'name', 'category_node'])
+    banner = serializers.PrimaryKeyRelatedField(
+        queryset=Banner.objects,
+    )
 
     class Meta:
         model = Notice
         exclude = ['uploader']
-
-    def create(self, validated_data):
-        """
-        Create and return new Notice, given the validated data
-        """
-
-        banner_data = validated_data.pop('banner')
-        banner = Banner.objects.get(**banner_data)
-        notice = Notice.objects.create(**validated_data, banner=banner)
-        if notice.send_email:
-            if notice.is_important:
-                # send email to all people
-                # People = swapper.load_model('kernel', 'Person')
-                # people = Person.objects.all().values_list('id', flat=True)
-                pass
-            else:
-                # send email to subscribed people
-                people = UserSubscription.objects.filter(
-                    category=notice.banner.category_node,
-                    action='email',
-                ).values_list('person_id', flat=True)
-            # TODO send email to all ids in list 'people'
-            # send_email_to(people, notice.content)
-        return notice
 
 
 class NoticeDetailSerializer(ModelSerializer):
@@ -61,8 +38,8 @@ class NoticeDetailSerializer(ModelSerializer):
     class Meta:
         model = Notice
         fields = ('id', 'title', 'datetime_modified', 'content',
-                  'is_draft', 'is_edited', 'is_important',
-                  'banner', 'read', 'starred', 'uploader')
+                  'is_draft', 'is_edited', 'is_important', 'is_public',
+                  'banner', 'read', 'starred', 'uploader', 'expiry_date')
 
     def is_read(self, obj):
         person = self.context['request'].person
@@ -89,17 +66,6 @@ class NoticeListSerializer(NoticeDetailSerializer):
     class Meta:
         model = Notice
         exclude = ['content']
-
-
-class NoticeUpdateSerializer(ModelSerializer):
-    """
-    Serializer to update Notice
-    """
-
-    class Meta:
-        model = Notice
-        fields = ('title', 'datetime_modified', 'content',
-                  'is_draft', 'is_edited', 'send_email')
 
 
 class ExpiredNoticeDetailSerializer(ModelSerializer):

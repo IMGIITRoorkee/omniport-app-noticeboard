@@ -1,5 +1,5 @@
 from django.contrib.postgres.search import SearchVector, SearchQuery
-
+from django.conf import settings
 from rest_framework import viewsets
 from rest_framework import status
 from rest_framework.response import Response
@@ -12,6 +12,7 @@ from noticeboard.utils.notices import (
 )
 from noticeboard.serializers.notices import *
 from noticeboard.models import *
+from noticeboard.permissions import IsUploader
 
 
 class NoticeViewSet(viewsets.ModelViewSet):
@@ -23,7 +24,8 @@ class NoticeViewSet(viewsets.ModelViewSet):
     2. 'keyword': Search keyword
     """
 
-    permission_classes = [IsAuthenticated, ]
+    permission_classes = [IsAuthenticated, IsUploader]
+    http_method_names = ['get', 'post', 'put', 'delete']
 
     def get_queryset(self):
 
@@ -61,7 +63,7 @@ class NoticeViewSet(viewsets.ModelViewSet):
                 queryset = Notice.objects.filter(is_draft=False).order_by(
                     '-datetime_modified')
 
-        elif self.action in ['retrieve', 'update']:
+        elif self.action in ['retrieve', 'update', 'destroy']:
             """
             The users would be able to view the draft if they are authenticated
             """
@@ -84,6 +86,12 @@ class NoticeViewSet(viewsets.ModelViewSet):
             queryset = queryset.exclude(
                 read_notice_set__person=self.request.person
             )
+        if settings.SITE.id > 1:
+            """
+            Assuming SITE_ID = 1 for intranet and SITE_ID = 2 for internet.
+            filter the queryset on the basis of internet/intranet visibility
+            """
+            queryset = queryset.filter(is_public=True)
 
         return queryset
 
@@ -93,64 +101,27 @@ class NoticeViewSet(viewsets.ModelViewSet):
         request
         :return: the serializer class
         """
-
         if self.action == 'list':
             return NoticeListSerializer
         elif self.action == 'retrieve':
             return NoticeDetailSerializer
-        elif self.action == 'create':
+        else:
             return NoticeSerializer
-        elif self.action == 'update':
-            return NoticeUpdateSerializer
 
-    def create(self, request, format=None):
-        roles = request.roles
-
-        data = request.data
-        serializer = NoticeSerializer(data=data)
+    def create(self, *args, **kwargs):
+        serializer = NoticeSerializer(data=self.request.data)
 
         if serializer.is_valid():
-            banner_id = data['banner']['id']
-
-            # Check if the user is authenticated to post under a banner
-            allowed_banner_ids = user_allowed_banners(roles)
-            if banner_id in allowed_banner_ids:
-                if data.get('is_important', False):
-                    serializer.is_important = has_super_upload_right(
-                        roles,
-                        banner_id
-                    )
-                print(request.person)
-                serializer.save(uploader=request.person)
-                return Response(serializer.data, status=status.HTTP_201_CREATED)
-
-            return Response(status=status.HTTP_401_UNAUTHORIZED)
+            serializer.save(uploader=self.request.person)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(status=status.HTTP_400_BAD_REQUEST)
 
-    def update(self, request, pk, format=None):
-        notice = self.get_object()
-        roles = request.roles
-
-        data = request.data
-        serializer = NoticeUpdateSerializer(notice, data=data)
+    def update(self, request, *args, **kwargs):
+        serializer = NoticeSerializer(data=self.request.data)
 
         if serializer.is_valid():
-            banner_id = data['banner']['id']
-
-            # Check if the user is authenticated to put under a banner
-            allowed_banner_ids = user_allowed_banners(roles)
-            if banner_id in allowed_banner_ids and \
-                    notice.uploader == request.person:
-                if data.get('is_important', False):
-                    serializer.is_important = has_super_upload_right(
-                        roles,
-                        banner_id
-                    )
-
-                serializer.save(uploader=request.person)
-                return Response(serializer.data, status=status.HTTP_200_OK)
-
-            return Response(status=status.HTTP_401_UNAUTHORIZED)
+            serializer.save(uploader=self.request.person)
+            return Response(serializer.data, status=status.HTTP_200_OK)
         return Response(status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -163,7 +134,8 @@ class ExpiredNoticeViewSet(viewsets.ModelViewSet):
     """
 
     lookup_field = 'notice_id'
-    permission_classes = [IsAuthenticated, ]
+    permission_classes = [IsAuthenticated, IsUploader]
+    http_method_names = ['get', 'delete']
 
     def get_queryset(self):
         keyword = self.request.query_params.get('keyword', None)

@@ -3,16 +3,15 @@ from django.conf import settings
 from rest_framework import viewsets
 from rest_framework import status
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticatedOrReadOnly
 
 from noticeboard.utils.notices import (
-    user_allowed_banners,
-    has_super_upload_right,
     get_drafted_notices,
 )
 from noticeboard.serializers.notices import *
 from noticeboard.models import *
 from noticeboard.permissions import IsUploader
+from noticeboard.pagination import NoticesPageNumberPagination
 
 
 class NoticeViewSet(viewsets.ModelViewSet):
@@ -24,7 +23,8 @@ class NoticeViewSet(viewsets.ModelViewSet):
     2. 'keyword': Search keyword
     """
 
-    permission_classes = [IsAuthenticated, IsUploader]
+    permission_classes = [IsAuthenticatedOrReadOnly, IsUploader]
+    pagination_class = NoticesPageNumberPagination
     http_method_names = ['get', 'post', 'put', 'delete']
 
     def get_queryset(self):
@@ -117,7 +117,8 @@ class NoticeViewSet(viewsets.ModelViewSet):
         return Response(status=status.HTTP_400_BAD_REQUEST)
 
     def update(self, request, *args, **kwargs):
-        serializer = NoticeSerializer(data=self.request.data)
+        notice = self.get_object()
+        serializer = NoticeSerializer(notice, data=self.request.data)
 
         if serializer.is_valid():
             serializer.save(uploader=self.request.person)
@@ -134,7 +135,7 @@ class ExpiredNoticeViewSet(viewsets.ModelViewSet):
     """
 
     lookup_field = 'notice_id'
-    permission_classes = [IsAuthenticated, IsUploader]
+    permission_classes = [IsAuthenticatedOrReadOnly, IsUploader]
     http_method_names = ['get', 'delete']
 
     def get_queryset(self):

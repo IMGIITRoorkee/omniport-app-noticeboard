@@ -2,7 +2,7 @@ import datetime
 
 from django.http import Http404
 from rest_framework import viewsets
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticatedOrReadOnly
 
 from categories.models import Category
 from noticeboard.serializers import (
@@ -29,7 +29,7 @@ class FilterListViewSet(viewsets.ReadOnlyModelViewSet):
     except Exception:
         queryset = Category.objects.none()
     pagination_class = None
-    permission_classes = [IsAuthenticated, ]
+    permission_classes = [IsAuthenticatedOrReadOnly, ]
 
 
 class FilterViewSet(viewsets.ReadOnlyModelViewSet):
@@ -42,7 +42,7 @@ class FilterViewSet(viewsets.ReadOnlyModelViewSet):
     """
 
     serializer_class = NoticeListSerializer
-    permission_classes = [IsAuthenticated, ]
+    permission_classes = [IsAuthenticatedOrReadOnly, ]
 
     @staticmethod
     def get_banner_object_from_id(pk):
@@ -96,7 +96,7 @@ class DateFilterViewSet(viewsets.ReadOnlyModelViewSet):
     """
 
     serializer_class = NoticeListSerializer
-    permission_classes = [IsAuthenticated, ]
+    permission_classes = [IsAuthenticatedOrReadOnly, ]
 
     @staticmethod
     def get_banner_object(pk):
@@ -154,7 +154,7 @@ class StarFilterViewSet(viewsets.ReadOnlyModelViewSet):
     """
 
     serializer_class = NoticeListSerializer
-    permission_classes = [IsAuthenticated, ]
+    permission_classes = [IsAuthenticatedOrReadOnly, ]
 
     def get_queryset(self):
         person = self.request.person

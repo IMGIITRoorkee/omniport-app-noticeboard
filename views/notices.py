@@ -122,6 +122,8 @@ class NoticeViewSet(viewsets.ModelViewSet):
 
         if serializer.is_valid():
             serializer.save(uploader=self.request.person)
+            # Remove this notice from all users' read notices set
+            notice.read_notice_set.clear()
             return Response(serializer.data, status=status.HTTP_200_OK)
         return Response(status=status.HTTP_400_BAD_REQUEST)
 

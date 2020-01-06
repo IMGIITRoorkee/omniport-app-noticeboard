@@ -1,5 +1,6 @@
+import logging
+
 from django.contrib.postgres.search import SearchVector, SearchQuery
-from django.conf import settings
 from rest_framework import viewsets
 from rest_framework import status
 from rest_framework.response import Response
@@ -12,6 +13,8 @@ from noticeboard.serializers.notices import *
 from noticeboard.models import *
 from noticeboard.permissions import IsUploader
 from noticeboard.pagination import NoticesPageNumberPagination
+
+logger = logging.getLogger('noticeboard')
 
 
 class NoticeViewSet(viewsets.ModelViewSet):
@@ -86,12 +89,6 @@ class NoticeViewSet(viewsets.ModelViewSet):
             queryset = queryset.exclude(
                 read_notice_set__person=self.request.person
             )
-        if settings.SITE.id > 1:
-            """
-            Assuming SITE_ID = 1 for intranet and SITE_ID = 2 for internet.
-            filter the queryset on the basis of internet/intranet visibility
-            """
-            queryset = queryset.filter(is_public=True)
 
         return queryset
 
@@ -112,8 +109,12 @@ class NoticeViewSet(viewsets.ModelViewSet):
         serializer = NoticeSerializer(data=self.request.data)
 
         if serializer.is_valid():
-            serializer.save(uploader=self.request.person)
+            notice = serializer.save(uploader=self.request.person)
+            logger.info(f'Notice #{notice.id} uploaded successfully by '
+                        f'{self.request.person}')
             return Response(serializer.data, status=status.HTTP_201_CREATED)
+        logger.warning(f'Request to upload notice denied for '
+                       f'{self.request.person}')
         return Response(status=status.HTTP_400_BAD_REQUEST)
 
     def update(self, request, *args, **kwargs):
@@ -124,7 +125,11 @@ class NoticeViewSet(viewsets.ModelViewSet):
             serializer.save(uploader=self.request.person)
             # Remove this notice from all users' read notices set
             notice.read_notice_set.clear()
+            logger.info(f'Notice #{notice.id} updated successfully by '
+                        f'{self.request.person}')
             return Response(serializer.data, status=status.HTTP_200_OK)
+        logger.warning(f'Request to update notice #{notice.id} denied for '
+                       f'{self.request.person}')
         return Response(status=status.HTTP_400_BAD_REQUEST)
 
 

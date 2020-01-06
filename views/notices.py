@@ -13,6 +13,7 @@ from noticeboard.serializers.notices import *
 from noticeboard.models import *
 from noticeboard.permissions import IsUploader
 from noticeboard.pagination import NoticesPageNumberPagination
+from notifications.actions import push_notification
 
 logger = logging.getLogger('noticeboard')
 
@@ -112,6 +113,11 @@ class NoticeViewSet(viewsets.ModelViewSet):
             notice = serializer.save(uploader=self.request.person)
             logger.info(f'Notice #{notice.id} uploaded successfully by '
                         f'{self.request.person}')
+            push_notification(
+                template=f'{notice.uploader.full_name} uploaded a notice '
+                         f'in {notice.banner.category_node.name}',
+                category=notice.banner.category_node
+            )
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         logger.warning(f'Request to upload notice denied for '
                        f'{self.request.person}')
@@ -127,6 +133,11 @@ class NoticeViewSet(viewsets.ModelViewSet):
             notice.read_notice_set.clear()
             logger.info(f'Notice #{notice.id} updated successfully by '
                         f'{self.request.person}')
+            push_notification(
+                template=f'{notice.uploader.full_name} updated the notice '
+                         f'#{notice.id} in {notice.banner.category_node.name}',
+                category=notice.banner.category_node
+            )
             return Response(serializer.data, status=status.HTTP_200_OK)
         logger.warning(f'Request to update notice #{notice.id} denied for '
                        f'{self.request.person}')

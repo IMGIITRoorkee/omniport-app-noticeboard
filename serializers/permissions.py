@@ -1,17 +1,17 @@
 from formula_one.serializers.base import ModelSerializer
-from noticeboard.models import Permissions
+from noticeboard.models import Permission
 from noticeboard.serializers.filters import BannerSerializer
 
 
-class PermissionsSerializer(ModelSerializer):
+class PermissionSerializer(ModelSerializer):
     """
-    Serializer for Permissions object
+    Serializer for Permission object
     """
 
     banner = BannerSerializer()
 
     class Meta:
-        model = Permissions
+        model = Permission
         fields = ('banner', )
 
     def to_representation(self, instance):

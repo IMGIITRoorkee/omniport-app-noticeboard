@@ -3,7 +3,7 @@ Run as
 
 ```
 docker exec -ti <container-id> python \
-/omniport/app/noticeboard/create_categories_and_banners.py
+/omniport/app/noticeboard/scripts/create_categories_and_banners.py
 ```
 
 """
@@ -11,7 +11,6 @@ docker exec -ti <container-id> python \
 import os
 
 import django
-from django.core import management
 import swapper
 
 
@@ -107,5 +106,4 @@ if __name__ == '__main__':
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "omniport.settings")
     django.setup()
 
-    # management.call_command('generatetree', 'noticeboard')
     populate_nodes()

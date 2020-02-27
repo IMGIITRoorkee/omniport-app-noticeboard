@@ -12,18 +12,19 @@ class IsUploader(BasePermission):
     over different actions on notices.
     """
 
-    def has_permission(self, request, view):
+    def has_permission(self, request, view, **kwargs):
         """
         Primary permission for notices.
         :param request: Django request object
-        :param obj: instance of the model
+        :param view:
+        :param kwargs: keyword arguments
         :return: boolean expression of permission
         """
 
         if request.method == 'GET' or request.method == 'DELETE':
             return True
 
-        roles = request.roles
+        person = request.person
         data = request.data
 
         try:
@@ -31,20 +32,22 @@ class IsUploader(BasePermission):
         except KeyError:
             return False
 
-        allowed_banner_ids = user_allowed_banners(roles)
+        allowed_banner_ids = user_allowed_banners(person)
         if banner_id in allowed_banner_ids:
             if data.get('is_important', False):
-                return has_super_upload_right(roles, banner_id)
+                return has_super_upload_right(person, banner_id)
             else:
                 return True
         else:
             return False
 
-    def has_object_permission(self, request, view, obj):
+    def has_object_permission(self, request, view, obj, **kwargs):
         """
         Object level permission for notices.
         :param request: Django request object
+        :param view:
         :param obj: instance of the model
+        :param kwargs: keyword arguments
         :return: boolean expression of permission
         """
         if request.method == 'GET':

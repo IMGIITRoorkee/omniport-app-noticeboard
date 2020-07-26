@@ -13,24 +13,30 @@ import os
 import django
 import swapper
 
+from noticeboard.models import Banner
+from categories.models import Category
 
-def populate_nodes():
-    from noticeboard.models import Banner
-    from categories.models import Category
+Department = swapper.load_model('kernel', 'Department')
 
-    Department = swapper.load_model('kernel', 'Department')
-    from shell.models import Centre
+try:
+    noticeboard_parent = Category.objects.get(slug='noticeboard')       
+except Category.DoesNotExist:
+    noticeboard_parent = Category.objects.create(
+        name='Noticeboard',
+        slug='noticeboard'
+    ).save()
 
-    try:
-        noticeboard_parent = Category.objects.get(
-            slug='noticeboard'
-        )
-    except Category.DoesNotExist:
-        noticeboard_parent = Category.objects.create(
-            Name='Noticeboard',
-            slug='noticeboard'
-        )
-
+try:
+    noticeboard_department = Category.objects.get(slug='noticeboard__department')
+except Category.DoesNotExist:
+    noticeboard_department = Category.objects.create(
+        name='Departments',
+        slug='noticeboard__department',
+        parent=noticeboard_parent
+    ).save()
+print(noticeboard_department)    
+    
+for department in Department.objects.all():
     try:
         noticeboard_department = Category.objects.get(
             slug='noticeboard__departments'

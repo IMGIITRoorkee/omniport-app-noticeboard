@@ -58,17 +58,20 @@ for department in Department.objects.all():
             parent=noticeboard_parent
         )
 
-    if noticeboard_centres is None or noticeboard_department is None:
-        raise Exception("ABC", noticeboard_department, noticeboard_centres)
+    if noticeboard_department is None:
+        raise Exception('First create category for noticeboard__department')
+
+    if noticeboard_centres is None:
+        raise Exception('First create category for noticeboard__centres')
 
     for department in Department.objects.all():
         try:
             category_node = Category.objects.get(
-                slug='noticeboard__' + department.code
+                slug=f'noticeboard__departments__{department.code}',
             )
         except Category.DoesNotExist:
             category_node = Category.objects.create(
-                slug='noticeboard__' + department.code,
+                slug=f'noticeboard__departments__{department.code}',
                 name=department.name,
                 parent=noticeboard_department
             )
@@ -87,11 +90,11 @@ for department in Department.objects.all():
     for centre in Centre.objects.all():
         try:
             category_node = Category.objects.get(
-                slug='noticeboard__' + centre.code
+                slug=f'noticeboard__centres__{centre.code}',
             )
         except Category.DoesNotExist:
             category_node = Category.objects.create(
-                slug='noticeboard__' + centre.code,
+                slug=f'noticeboard__centres__{centre.code}',
                 name=centre.name,
                 parent=noticeboard_centres
             )

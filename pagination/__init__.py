@@ -1,0 +1,1 @@
+from noticeboard.pagination.notice_list import NoticesPageNumberPagination

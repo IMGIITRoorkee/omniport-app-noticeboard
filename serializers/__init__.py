@@ -1,5 +1,5 @@
 from noticeboard.serializers.permissions import (
-    PermissionsSerializer
+    PermissionSerializer
 )
 from noticeboard.serializers.filters import (
     BannerSerializer,
@@ -9,7 +9,6 @@ from noticeboard.serializers.notices import (
     NoticeSerializer,
     NoticeDetailSerializer,
     NoticeListSerializer,
-    NoticeUpdateSerializer,
     ExpiredNoticeListSerializer,
     ExpiredNoticeDetailSerializer,
 )

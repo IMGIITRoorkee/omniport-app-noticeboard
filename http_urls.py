@@ -1,16 +1,14 @@
 from django.conf.urls import url
 from noticeboard.views import *
 
-app_name = 'noticeboard'
-
-
 notice_list = NoticeViewSet.as_view({
     'get': 'list',
     'post': 'create'
 })
 notice = NoticeViewSet.as_view({
     'get': 'retrieve',
-    'put': 'update'
+    'put': 'update',
+    'delete': 'destroy'
 })
 
 expired_notice_list = ExpiredNoticeViewSet.as_view({
@@ -18,6 +16,7 @@ expired_notice_list = ExpiredNoticeViewSet.as_view({
 })
 expired_notice = ExpiredNoticeViewSet.as_view({
     'get': 'retrieve',
+    'delete': 'destroy',
 })
 
 filter_list = FilterListViewSet.as_view({
@@ -48,4 +47,5 @@ urlpatterns = [
     url(r'date_filter_view/', date_filter_view),
     url(r'star_filter_view/', star_filter_view),
     url(r'permissions/', permissions),
+    url(r'copy_media/', CopyMedia.as_view(), name='copy_media'),
 ]

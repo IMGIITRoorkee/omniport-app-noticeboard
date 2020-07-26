@@ -1,17 +1,11 @@
 import datetime
 
-from rest_framework.views import APIView
-from rest_framework import viewsets
-from rest_framework.response import Response
-from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
-
 from django.http import Http404
-from django.contrib.postgres.search import SearchVector
+from rest_framework import viewsets
+from rest_framework.permissions import IsAuthenticatedOrReadOnly
 
 from categories.models import Category
 from noticeboard.serializers import (
-    BannerSerializer,
     MainCategorySerializer,
     NoticeListSerializer,
 )
@@ -35,7 +29,7 @@ class FilterListViewSet(viewsets.ReadOnlyModelViewSet):
     except Exception:
         queryset = Category.objects.none()
     pagination_class = None
-    permission_classes = [IsAuthenticated, ]
+    permission_classes = [IsAuthenticatedOrReadOnly, ]
 
 
 class FilterViewSet(viewsets.ReadOnlyModelViewSet):
@@ -48,15 +42,17 @@ class FilterViewSet(viewsets.ReadOnlyModelViewSet):
     """
 
     serializer_class = NoticeListSerializer
-    permission_classes = [IsAuthenticated, ]
+    permission_classes = [IsAuthenticatedOrReadOnly, ]
 
-    def get_banner_object_from_id(self, pk):
+    @staticmethod
+    def get_banner_object_from_id(pk):
         try:
             return Banner.objects.get(pk=pk)
         except Banner.DoesNotExist:
             raise Http404
 
-    def get_category_object_from_slug(self, main_category_slug):
+    @staticmethod
+    def get_category_object_from_slug(main_category_slug):
         try:
             return Category.objects.get(slug=main_category_slug)
         except Category.DoesNotExist:
@@ -74,7 +70,9 @@ class FilterViewSet(viewsets.ReadOnlyModelViewSet):
             queryset = Notice.objects.filter(banner=banner_object)
 
         elif main_category_slug:
-            category_nodes = self.get_category_object_from_slug(main_category_slug).get_children()
+            category_nodes = self.get_category_object_from_slug(
+                main_category_slug,
+            ).get_children()
 
             banners = Banner.objects.filter(category_node__in=category_nodes)
             queryset = Notice.objects.filter(banner__in=banners)
@@ -98,15 +96,17 @@ class DateFilterViewSet(viewsets.ReadOnlyModelViewSet):
     """
 
     serializer_class = NoticeListSerializer
-    permission_classes = [IsAuthenticated, ]
+    permission_classes = [IsAuthenticatedOrReadOnly, ]
 
-    def get_banner_object(self, pk):
+    @staticmethod
+    def get_banner_object(pk):
         try:
             return Banner.objects.get(pk=pk)
         except Banner.DoesNotExist:
             raise Http404
 
-    def get_category_object_from_slug(self, main_category_slug):
+    @staticmethod
+    def get_category_object_from_slug(main_category_slug):
         try:
             return Category.objects.get(slug=main_category_slug)
         except Category.DoesNotExist:
@@ -136,7 +136,9 @@ class DateFilterViewSet(viewsets.ReadOnlyModelViewSet):
             queryset = queryset.filter(banner=banner_object)
 
         elif main_category_slug:
-            category_nodes = self.get_category_object_from_slug(main_category_slug).get_children()
+            category_nodes = self.get_category_object_from_slug(
+                main_category_slug
+            ).get_children()
 
             banners = Banner.objects.filter(category_node__in=category_nodes)
             queryset = queryset.filter(banner__in=banners)
@@ -152,14 +154,16 @@ class StarFilterViewSet(viewsets.ReadOnlyModelViewSet):
     """
 
     serializer_class = NoticeListSerializer
-    permission_classes = [IsAuthenticated, ]
+    permission_classes = [IsAuthenticatedOrReadOnly, ]
 
     def get_queryset(self):
         person = self.request.person
 
         notice_user, created = NoticeUser.objects.get_or_create(person=person)
         try:
-            queryset = notice_user.starred_notices.all().order_by('-datetime_modified')
+            queryset = notice_user.starred_notices.all().order_by(
+                '-datetime_modified'
+            )
         except Exception:
             queryset = Notice.objects.none()
         return queryset

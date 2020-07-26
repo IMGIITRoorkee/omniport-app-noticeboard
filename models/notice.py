@@ -1,10 +1,8 @@
-import swapper
 import datetime
-from tinymce.models import HTMLField
 
+import swapper
 from django.db import models
-from django.contrib.contenttypes.models import ContentType
-from django.contrib.contenttypes.fields import GenericForeignKey
+from tinymce.models import HTMLField
 
 from formula_one.models.base import Model
 
@@ -14,8 +12,14 @@ class AbstractNotice(Model):
     This abstract model is inherited by Notice and ExpiredNotice
     models
 
-    This class holds general informations about a notice.
+    This class holds general information about a notice.
     """
+
+    uploader = models.ForeignKey(
+        to=swapper.get_model_name('kernel', 'Person'),
+        related_name='uploaded_notices',
+        on_delete=models.CASCADE,
+    )
 
     title = models.CharField(
         max_length=255,
@@ -29,18 +33,22 @@ class AbstractNotice(Model):
         on_delete=models.CASCADE,
     )
 
-    expiry_date = models.DateTimeField()
+    expiry_date = models.DateField()
 
     send_email = models.BooleanField(
         default=False,
     )
-
     is_draft = models.BooleanField(
         default=False,
     )
-
     is_edited = models.BooleanField(
         default=False,
+    )
+    is_important = models.BooleanField(
+        default=False,
+    )
+    is_public = models.BooleanField(
+        default=True,
     )
 
     class Meta:
@@ -59,7 +67,7 @@ class AbstractNotice(Model):
         title = self.title
         banner = self.banner
 
-        return f'{title}: {banner}'
+        return f'{title} | {banner}'
 
     @property
     def notice_has_expired(self):
@@ -99,4 +107,10 @@ class ExpiredNotice(AbstractNotice):
 
     notice_id = models.BigIntegerField(
         primary_key=True,
+    )
+
+    uploader = models.ForeignKey(
+        to=swapper.get_model_name('kernel', 'Person'),
+        related_name='uploaded_notices_expired',
+        on_delete=models.CASCADE,
     )

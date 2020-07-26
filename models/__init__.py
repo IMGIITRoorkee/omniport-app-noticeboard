@@ -5,8 +5,8 @@ from noticeboard.models.notice import (
 from noticeboard.models.user import (
     NoticeUser,
 )
-from noticeboard.models.permissions import (
-    Permissions,
+from noticeboard.models.permission import (
+    Permission,
 )
 from noticeboard.models.banner import (
     Banner,

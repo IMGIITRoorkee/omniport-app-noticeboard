@@ -1,10 +1,7 @@
 import swapper
 from django.db import models
-from django.contrib.contenttypes.models import ContentType
-from django.contrib.contenttypes.fields import GenericForeignKey
 
 from formula_one.models.base import Model
-from noticeboard.models import Notice
 
 
 class NoticeUser(Model):
@@ -41,5 +38,5 @@ class NoticeUser(Model):
         """
 
         person = self.person
-        
+
         return f'{person}'

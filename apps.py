@@ -1,6 +1,3 @@
-from django.apps import AppConfig
+from configuration.utils.app_config_class import get_app_config_class
 
-
-class Config(AppConfig):
-    name = 'noticeboard'
-    verbose_name = 'NoticeBoard'
+Config = get_app_config_class(__file__)

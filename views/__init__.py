@@ -14,3 +14,4 @@ from noticeboard.views.filters import (
 from noticeboard.views.permissions import (
     BannerPermissionViewSet,
 )
+from noticeboard.views.media import CopyMedia

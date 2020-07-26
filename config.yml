@@ -8,16 +8,20 @@ baseUrls:
 isApi: true
 acceptables:
   roles:
-  - name: Student
-    activeStatuses:
-    - IS_ACTIVE
-    - HAS_BEEN_ACTIVE
-  - name: Faculty    
-    activeStatuses:
-    - IS_ACTIVE
-    - HAS_BEEN_ACTIVE
-categories:
-  - name: Department
-    slug: department
+    - name: Student
+      activeStatuses:
+        - IS_ACTIVE
+        - HAS_BEEN_ACTIVE
+    - name: FacultyMember
+      activeStatuses:
+        - IS_ACTIVE
+        - HAS_BEEN_ACTIVE
+categorisation:
   - name: Authorities
     slug: authorities
+  - name: Departments
+    slug: departments
+  - name: Centres
+    slug: centres
+  - name: Bhawans
+    slug: bhawans

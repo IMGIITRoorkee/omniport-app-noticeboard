@@ -1,7 +1,3 @@
-import swapper
-
-from rest_framework import serializers
-
 from formula_one.serializers.base import ModelSerializer
 from categories.serializers import CategorySerializer
 from noticeboard.models import Banner
@@ -12,11 +8,12 @@ class BannerSerializer(ModelSerializer):
     Serializer for Banner object
     """
 
-    category_node = serializers.PrimaryKeyRelatedField(many=False, read_only=True)
+    category_node = CategorySerializer(many=False, read_only=True)
+    parent_category = CategorySerializer(many=False, read_only=True)
 
     class Meta:
         model = Banner
-        fields = ('id', 'name', 'category_node')
+        fields = ('id', 'name', 'category_node', 'parent_category')
 
 
 class MainCategorySerializer(CategorySerializer):
@@ -26,7 +23,7 @@ class MainCategorySerializer(CategorySerializer):
 
     def to_representation(self, instance):
         """
-        Overwrite the to_represention of CategorySerializer
+        Overwrite the to_representation of CategorySerializer
         """
 
         representation = super().to_representation(instance)

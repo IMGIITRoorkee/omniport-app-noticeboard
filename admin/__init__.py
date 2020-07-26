@@ -4,12 +4,8 @@ from noticeboard.models import *
 
 # Register all models
 
-## TODO Generic foreign key relations admin view
-
 omnipotence.register(Notice)
 omnipotence.register(ExpiredNotice)
-
 omnipotence.register(NoticeUser)
-
-omnipotence.register(Permissions)
+omnipotence.register(Permission)
 omnipotence.register(Banner)

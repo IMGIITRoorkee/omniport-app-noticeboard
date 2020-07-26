@@ -2,22 +2,20 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
-from rest_framework.exceptions import NotFound
 
 from django.http import Http404
 
 from noticeboard.models import (
     Notice,
-    ExpiredNotice,
     NoticeUser,
 )
 
 
 class StarReadNotices(APIView):
-
     permission_classes = [IsAuthenticated, ]
 
-    def check_notice_object(self, pk):
+    @staticmethod
+    def check_notice_object(pk):
         if Notice.objects.filter(pk=pk).exists():
             pass
         else:

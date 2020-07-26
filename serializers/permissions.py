@@ -1,18 +1,26 @@
-import swapper
-
-from rest_framework import serializers
 from formula_one.serializers.base import ModelSerializer
-from noticeboard.models import Permissions
+from noticeboard.models import Permission
 from noticeboard.serializers.filters import BannerSerializer
 
 
-class PermissionsSerializer(ModelSerializer):
+class PermissionSerializer(ModelSerializer):
     """
-    Serializer for Permissions object
+    Serializer for Permission object
     """
 
     banner = BannerSerializer()
 
     class Meta:
-        model = Permissions
-        fields = ('banner',)
+        model = Permission
+        fields = ('banner', )
+
+    def to_representation(self, instance):
+        """
+
+        :param instance:
+        :return:
+        """
+        representation = super().to_representation(instance)
+        representation['banner']['is_super_uploader'] = \
+            instance.is_super_uploader
+        return representation

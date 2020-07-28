@@ -1,10 +1,13 @@
 import logging
-
+import swapper
 from django.contrib.postgres.search import SearchVector, SearchQuery
 from rest_framework import viewsets
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticatedOrReadOnly
+
+from formula_one.enums.active_status import ActiveStatus
+from notifications.actions import push_notification
 
 from noticeboard.utils.notices import (
     get_drafted_notices,
@@ -13,9 +16,12 @@ from noticeboard.serializers.notices import *
 from noticeboard.models import *
 from noticeboard.permissions import IsUploader
 from noticeboard.pagination import NoticesPageNumberPagination
-from notifications.actions import push_notification
+from noticeboard.utils.send_email import send_email
 
 logger = logging.getLogger('noticeboard')
+Person = swapper.load_model('kernel', 'Person')
+FacultyMember = swapper.load_model('kernel', 'FacultyMember')
+Student = swapper.load_model('kernel', 'Student')
 
 
 class NoticeViewSet(viewsets.ModelViewSet):
@@ -106,6 +112,33 @@ class NoticeViewSet(viewsets.ModelViewSet):
         else:
             return NoticeSerializer
 
+    def get_recipients(self, is_send_email_role):
+        """
+        Return the recipients of the notice's change e-mail
+        :param is_send_email_role: can be all, student or faculty
+        :return: the recipients of the notice's change e-mail
+        """
+
+        students = Student.objects_filter(
+            active_status=ActiveStatus.IS_ACTIVE,
+        ) \
+            .values_list('person__id', flat=True)
+
+        faculties = FacultyMember.objects_filter(
+            active_status=ActiveStatus.IS_ACTIVE,
+        ) \
+            .values_list('person__id', flat=True)
+        if is_send_email_role == 'student':
+            return list(students)
+
+        elif is_send_email_role == 'faculty':
+            return list(faculties)
+
+        elif is_send_email_role == 'all':
+            return list(students.union(faculties))
+
+        return list()
+
     def create(self, *args, **kwargs):
         serializer = NoticeSerializer(data=self.request.data)
 
@@ -117,6 +150,14 @@ class NoticeViewSet(viewsets.ModelViewSet):
                 template=f'{notice.uploader.full_name} uploaded a notice '
                          f'in {notice.banner.category_node.name}',
                 category=notice.banner.category_node
+            )
+            is_send_email_role = self.request.data.get('is_send_email_role')
+            persons = self.get_recipients(is_send_email_role)
+            send_email(
+                subject_text=notice.title,
+                body_text=notice.content,
+                persons=persons,
+                by=self.request.person.id,
             )
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         logger.warning(f'Request to upload notice denied for '
@@ -137,6 +178,14 @@ class NoticeViewSet(viewsets.ModelViewSet):
                 template=f'{notice.uploader.full_name} updated the notice '
                          f'#{notice.id} in {notice.banner.category_node.name}',
                 category=notice.banner.category_node
+            )
+            is_send_email_role = self.request.data.get('is_send_email_role')
+            persons = self.get_recipients(is_send_email_role)
+            send_email(
+                subject_text=f'{notice.title} [UPDATED]',
+                body_text=notice.content,
+                persons=persons,
+                by=self.request.person.id,
             )
             return Response(serializer.data, status=status.HTTP_200_OK)
         logger.warning(f'Request to update notice #{notice.id} denied for '

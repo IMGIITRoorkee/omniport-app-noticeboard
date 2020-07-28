@@ -1,18 +1,30 @@
 nomenclature:
   name: noticeboard
   verboseName: Noticeboard
+description: A digital e-noticeboard
 baseUrls:
   http: noticeboard/
   ws: noticeboard/
   static: noticeboard/
 isApi: true
 acceptables:
+  ipAddressRings:
+    - internet
+    - intranet
+    - maintainers
+    - specifics
+    - administrator
+    - self
   roles:
     - name: Student
       activeStatuses:
         - IS_ACTIVE
         - HAS_BEEN_ACTIVE
     - name: FacultyMember
+      activeStatuses:
+        - IS_ACTIVE
+        - HAS_BEEN_ACTIVE
+    - name: Guest
       activeStatuses:
         - IS_ACTIVE
         - HAS_BEEN_ACTIVE

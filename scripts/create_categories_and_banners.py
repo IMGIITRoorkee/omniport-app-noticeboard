@@ -17,6 +17,7 @@ from noticeboard.models import Banner
 from categories.models import Category
 
 Department = swapper.load_model('kernel', 'Department')
+Centre = swapper.load_model('kernel', 'Centre')
 
 try:
     noticeboard_parent = Category.objects.get(slug='noticeboard')       

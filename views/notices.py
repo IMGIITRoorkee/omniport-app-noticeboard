@@ -146,18 +146,19 @@ class NoticeViewSet(viewsets.ModelViewSet):
             notice = serializer.save(uploader=self.request.person)
             logger.info(f'Notice #{notice.id} uploaded successfully by '
                         f'{self.request.person}')
-            push_notification(
-                template=f'{notice.uploader.full_name} uploaded a notice '
-                         f'in {notice.banner.category_node.name}',
-                category=notice.banner.category_node
-            )
+           # push_notification(
+           #     template=f'{notice.uploader.full_name} uploaded a notice '
+           #              f'in {notice.banner.category_node.name}',
+           #     category=notice.banner.category_node
+           # )
             is_send_email_role = self.request.data.get('is_send_email_role')
             persons = self.get_recipients(is_send_email_role)
             send_email(
-                subject_text=notice.title,
+                subject_text=f'{notice.banner.name}: {notice.title}',
                 body_text=notice.content,
                 persons=persons,
                 by=self.request.person.id,
+                notice_id=notice.id
             )
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         logger.warning(f'Request to upload notice denied for '
@@ -182,10 +183,11 @@ class NoticeViewSet(viewsets.ModelViewSet):
             is_send_email_role = self.request.data.get('is_send_email_role')
             persons = self.get_recipients(is_send_email_role)
             send_email(
-                subject_text=f'{notice.title} [UPDATED]',
+                subject_text=f'[UPDATED] {notice.banner.name}: {notice.title}',
                 body_text=notice.content,
                 persons=persons,
                 by=self.request.person.id,
+                notce_id=notice.id
             )
             return Response(serializer.data, status=status.HTTP_200_OK)
         logger.warning(f'Request to update notice #{notice.id} denied for '

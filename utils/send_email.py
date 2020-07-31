@@ -11,6 +11,7 @@ def send_email(
     by=None,
     email_ids=None,
     check_if_primary_email_verified=True,
+    notice_id=None,
 ):
     """
     Utility to send an email
@@ -22,6 +23,7 @@ def send_email(
     :param email_ids: e-mail ids of the persons to whom it is to be sent
     :param check_if_primary_email_verified: Boolean for whether to check email
     verification
+    :param notice_id: id of the notice instance for full_path
     """
 
     app_verbose_name = Config.verbose_name
@@ -31,9 +33,11 @@ def send_email(
         name=app_verbose_name,
         slug=app_slug,
     )
-    full_path = f'https://internet.channeli.in/{app_slug}'
+    full_path = f'https://stage.channeli.in/{app_slug}'
+    if notice_id:
+        full_path = f'{full_path}/notice/{notice_id}'
     relative_url_resolver = (
-        '<base href="https://internet.channeli.in/" target="_blank">'
+        '<base href="https://stage.channeli.in/" target="_blank">'
     )
     body_text = f'{relative_url_resolver}{body_text}'
     email_push(

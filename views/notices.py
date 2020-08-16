@@ -187,7 +187,7 @@ class NoticeViewSet(viewsets.ModelViewSet):
                 body_text=notice.content,
                 persons=persons,
                 by=self.request.person.id,
-                notce_id=notice.id
+                notice_id=notice.id
             )
             return Response(serializer.data, status=status.HTTP_200_OK)
         logger.warning(f'Request to update notice #{notice.id} denied for '

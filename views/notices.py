@@ -7,8 +7,11 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticatedOrReadOnly
 
 from noticeboard.utils.notices import (
-    get_drafted_notices,
+    get_drafted_notices, has_super_upload_right
 )
+from noticeboard.utils.get_recipients import get_recipients
+from noticeboard.utils.send_email import send_email
+from noticeboard.utils.send_push_notification import send_push_notification
 from noticeboard.serializers.notices import *
 from noticeboard.models import *
 from noticeboard.permissions import IsUploader
@@ -110,14 +113,44 @@ class NoticeViewSet(viewsets.ModelViewSet):
         serializer = NoticeSerializer(data=self.request.data)
 
         if serializer.is_valid():
-            notice = serializer.save(uploader=self.request.person)
+            person = self.request.person
+            notice = serializer.save(uploader=person)
+            category = notice.banner.category_node
             logger.info(f'Notice #{notice.id} uploaded successfully by '
                         f'{self.request.person}')
-            push_notification(
-                template=f'{notice.uploader.full_name} uploaded a notice '
-                         f'in {notice.banner.category_node.name}',
-                category=notice.banner.category_node
+            super_upload_right = has_super_upload_right(person, notice.banner_id)
+            is_send_notification = self.request.data.get('is_send_notification')
+            send_notification_to_role = self.request.data.get('send_notification_to_role')
+            persons = list()
+            ignore_subscriptions = False
+            mail_subject_text = f'{notice.banner.name}: {notice.title}'
+            notification_template = f'{notice.uploader.full_name} uploaded a notice '\
+                                    f'in {notice.banner.category_node.name}'
+            if super_upload_right and is_send_notification and send_notification_to_role:
+                persons = get_recipients(role=send_notification_to_role)
+                ignore_subscriptions = True
+            else:
+                persons = None
+                ignore_subscriptions = False
+            send_email(
+                subject_text=mail_subject_text,
+                body_text=notice.content,
+                persons=persons,
+                has_custom_user_target=ignore_subscriptions,
+                send_only_to_subscribed_targets=(not ignore_subscriptions),
+                category=category,
+                by=person.id,
+                notice_id=notice.id,
             )
+            send_push_notification(
+                    template=notification_template,
+                    persons=persons,
+                    has_custom_user_target=ignore_subscriptions,
+                    send_only_to_subscribed_targets=(not ignore_subscriptions),
+                    category=category,
+                    notice_id=notice.id,
+            )
+
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         logger.warning(f'Request to upload notice denied for '
                        f'{self.request.person}')
@@ -128,16 +161,46 @@ class NoticeViewSet(viewsets.ModelViewSet):
         serializer = NoticeSerializer(notice, data=self.request.data)
 
         if serializer.is_valid():
-            serializer.save(uploader=self.request.person)
+            person = self.request.person
+            serializer.save(uploader=person)
+            category = notice.banner.category_node
             # Remove this notice from all users' read notices set
             notice.read_notice_set.clear()
             logger.info(f'Notice #{notice.id} updated successfully by '
                         f'{self.request.person}')
-            push_notification(
-                template=f'{notice.uploader.full_name} updated the notice '
-                         f'#{notice.id} in {notice.banner.category_node.name}',
-                category=notice.banner.category_node
+            super_upload_right = has_super_upload_right(person, notice.banner_id)
+            is_send_notification = self.request.data.get('is_send_notification')
+            send_notification_to_role = self.request.data.get('send_notification_to_role')
+            persons = list()
+            ignore_subscriptions = False
+            mail_subject_text = f'[Updated] {notice.banner.name}: {notice.title}'
+            notification_template = f'{notice.uploader.full_name} updated the notice '\
+                                    f'#{notice.id} in {notice.banner.category_node.name}'
+            if super_upload_right and is_send_notification and send_notification_to_role:
+                persons = get_recipients(role=send_notification_to_role)
+                ignore_subscriptions = True
+            else:
+                persons = None
+                ignore_subscriptions = False
+            send_email(
+                subject_text=mail_subject_text,
+                body_text=notice.content,
+                persons=persons,
+                has_custom_user_target=ignore_subscriptions,
+                send_only_to_subscribed_targets=(not ignore_subscriptions),
+                category=category,
+                by=person.id,
+                notice_id=notice.id,
             )
+            send_push_notification(
+                    template=notification_template,
+                    persons=persons,
+                    has_custom_user_target=ignore_subscriptions,
+                    send_only_to_subscribed_targets=(not ignore_subscriptions),
+                    category=category,
+                    notice_id=notice.id,
+            )
+
             return Response(serializer.data, status=status.HTTP_200_OK)
         logger.warning(f'Request to update notice #{notice.id} denied for '
                        f'{self.request.person}')

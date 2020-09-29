@@ -15,19 +15,6 @@ acceptables:
     - specifics
     - administrator
     - self
-  roles:
-    - name: Student
-      activeStatuses:
-        - IS_ACTIVE
-        - HAS_BEEN_ACTIVE
-    - name: FacultyMember
-      activeStatuses:
-        - IS_ACTIVE
-        - HAS_BEEN_ACTIVE
-    - name: Guest
-      activeStatuses:
-        - IS_ACTIVE
-        - HAS_BEEN_ACTIVE
 categorisation:
   - name: Authorities
     slug: authorities

@@ -44,5 +44,5 @@ def send_email(
         by=by,
         target_app_name=app_verbose_name,
         target_app_url=full_path,
-        send_only_to_subscribed_targets=send_only_to_subscribed_targets,
+        send_only_to_subscribed_users=send_only_to_subscribed_targets,
     )

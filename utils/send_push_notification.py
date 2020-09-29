@@ -36,5 +36,5 @@ def send_push_notification(
         person=None,
         has_custom_users_target=has_custom_user_target,
         persons=persons,
-        send_only_to_subscribed_targets=send_only_to_subscribed_targets,
+        send_only_to_subscribed_users=send_only_to_subscribed_targets,
     )

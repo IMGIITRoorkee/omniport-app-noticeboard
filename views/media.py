@@ -67,7 +67,7 @@ class CopyMedia(APIView):
                 os.makedirs(pdf2img_path, exist_ok=True)
                 with tempfile.TemporaryDirectory() as temp_dir:
                     images = convert_from_path(
-                        pdf_path=destination,
+                        media_path=destination,
                         dpi=256,
                         fmt='jpeg',
                         output_folder=temp_dir
@@ -98,7 +98,7 @@ class CopyMedia(APIView):
             return Response(
                 data={
                     'path': new_path,
-                    "pdf_path": new_path_pdf
+                    "media_path": new_path_pdf
                 }, status=status.HTTP_200_OK
             )
         except KeyError:

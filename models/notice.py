@@ -50,6 +50,11 @@ class AbstractNotice(Model):
     is_public = models.BooleanField(
         default=True,
     )
+    pdf_path = models.CharField(
+        max_length=255,
+        blank=True,
+        default=''
+    )
 
     class Meta:
         """

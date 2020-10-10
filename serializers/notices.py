@@ -39,7 +39,7 @@ class NoticeDetailSerializer(ModelSerializer):
         model = Notice
         fields = ('id', 'title', 'datetime_modified', 'content',
                   'is_draft', 'is_edited', 'is_important', 'is_public',
-                  'banner', 'read', 'starred', 'uploader', 'expiry_date')
+                  'banner', 'read', 'starred', 'uploader', 'expiry_date', 'pdf_path')
 
     def is_read(self, obj):
         person = self.context['request'].person
@@ -82,7 +82,7 @@ class ExpiredNoticeDetailSerializer(ModelSerializer):
     class Meta:
         model = ExpiredNotice
         fields = ('id', 'title', 'banner',
-                  'is_important', 'datetime_modified', 'content', 'uploader')
+                  'is_important', 'datetime_modified', 'content', 'uploader', 'pdf_path')
 
 
 class ExpiredNoticeListSerializer(ExpiredNoticeDetailSerializer):

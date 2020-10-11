@@ -82,7 +82,7 @@ class CopyMedia(APIView):
                         fp=image_path,
                         format='JPEG'
                     )
-                    new_path_pdf=new_path
+                    media_path=new_path
                     new_path = os.path.join(
                         settings.MEDIA_URL, app_name, 'pdf2images', image_file
                     )
@@ -98,7 +98,7 @@ class CopyMedia(APIView):
             return Response(
                 data={
                     'path': new_path,
-                    "media_path": new_path_pdf
+                    'media_path': media_path
                 }, status=status.HTTP_200_OK
             )
         except KeyError:

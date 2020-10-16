@@ -57,6 +57,7 @@ class CopyMedia(APIView):
             new_path = os.path.join(
                 settings.MEDIA_URL, app_name, filename
             )
+            media_path=new_path
             try:
                 shutil.copyfile(source, destination)
             except IOError:

@@ -14,7 +14,7 @@ from noticeboard.utils.send_email import send_email
 from noticeboard.utils.send_push_notification import send_push_notification
 from noticeboard.serializers.notices import *
 from noticeboard.models import *
-from noticeboard.permissions import IsUploader
+from noticeboard.permissions import IsUploader, isPublicInternet
 from noticeboard.pagination import NoticesPageNumberPagination
 from notifications.actions import push_notification
 
@@ -30,7 +30,7 @@ class NoticeViewSet(viewsets.ModelViewSet):
     2. 'keyword': Search keyword
     """
 
-    permission_classes = [IsAuthenticatedOrReadOnly, IsUploader]
+    permission_classes = [IsAuthenticatedOrReadOnly, IsUploader, isPublicInternet]
     pagination_class = NoticesPageNumberPagination
     http_method_names = ['get', 'post', 'put', 'delete']
 

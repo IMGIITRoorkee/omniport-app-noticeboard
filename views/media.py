@@ -18,15 +18,15 @@ from noticeboard.apps import Config
 class CopyMedia(APIView):
     """
     Copy media entities like images or pdf files for notice content
-    into Django media folder from personal files. This also ensures that
-    even if media is deleted from personal file, the notice remains unharmed
+    into Django media folder from network files. This also ensures that
+    even if media is deleted from network file, the notice remains unharmed
     """
     permission_classes = [IsAuthenticated, ]
     http_method_names = ['post', ]
 
     def post(self, request, format=None):
         """
-        Take the path from personal file from the django_filemanager, check MIME
+        Take the path from network file from the django_filemanager, check MIME
         and copy the same in noticeboard media directory
         :param request:
         :param format:
@@ -34,20 +34,7 @@ class CopyMedia(APIView):
         """
         try:
             path = request.data['path'].strip('/')
-            source = os.path.normpath(os.path.join(settings.PERSONAL_DIR, path))
-            authorized_pattern = str(os.path.join(
-                settings.PERSONAL_DIR,
-                str(request.person.folder_user.folder_name())
-            ))
-
-            if re.match(
-                    pattern=f'^{authorized_pattern}/',
-                    string=str(source),
-            ) is None:
-                return Response(status=status.HTTP_401_UNAUTHORIZED)
-
-            if not os.path.exists(source):
-                return Response(status=status.HTTP_400_BAD_REQUEST)
+            source = os.path.normpath(os.path.join(settings.NETWORK_STORAGE_ROOT, path))
 
             filename = path.split('/')[-1]
             app_name = Config.name

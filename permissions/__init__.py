@@ -1,1 +1,2 @@
 from noticeboard.permissions.uploader import IsUploader
+from noticeboard.permissions.public_notices import isPublicInternet

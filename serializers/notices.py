@@ -44,18 +44,24 @@ class NoticeDetailSerializer(ModelSerializer):
     def is_read(self, obj):
         person = self.context['request'].person
 
-        notice_user, created = NoticeUser.objects.get_or_create(person=person)
-        read_notices = notice_user.read_notices.all()
+        if person:
+            notice_user, created = NoticeUser.objects.get_or_create(person=person)
+            read_notices = notice_user.read_notices.all()
 
-        return read_notices.filter(id=obj.id).exists()
+            return read_notices.filter(id=obj.id).exists()
+
+        return False
 
     def is_starred(self, obj):
         person = self.context['request'].person
 
-        notice_user, created = NoticeUser.objects.get_or_create(person=person)
-        starred_notices = notice_user.starred_notices.all()
+        if person:
+            notice_user, created = NoticeUser.objects.get_or_create(person=person)
+            starred_notices = notice_user.starred_notices.all()
 
-        return starred_notices.filter(id=obj.id).exists()
+            return starred_notices.filter(id=obj.id).exists()
+        
+        return False
 
 
 class NoticeListSerializer(NoticeDetailSerializer):

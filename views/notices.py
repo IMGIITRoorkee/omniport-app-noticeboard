@@ -14,6 +14,7 @@ from noticeboard.utils.send_email import send_email
 from noticeboard.utils.send_push_notification import send_push_notification
 from noticeboard.serializers.notices import *
 from noticeboard.models import *
+from categories.models import Category
 from noticeboard.permissions import IsUploader, isPublicInternet
 from noticeboard.pagination import NoticesPageNumberPagination
 from notifications.actions import push_notification
@@ -53,6 +54,17 @@ class NoticeViewSet(viewsets.ModelViewSet):
 
             if notice_class == 'draft':
                 queryset = get_drafted_notices(self.request)
+
+            elif notice_class == 'institute_notices':
+                category_node = Category.objects.get(slug='noticeboard__authorities__pic')
+                banner_object = Banner.objects.get(category_node=category_node)
+                queryset = Notice.objects.filter(
+                    is_draft=False
+                ).exclude(
+                    banner=banner_object
+                ).order_by(
+                    '-datetime_modified'
+                )
 
             elif keyword:
                 search_vector = SearchVector('title', 'content')

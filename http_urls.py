@@ -1,5 +1,7 @@
 from django.conf.urls import url
+
 from noticeboard.views import *
+from noticeboard.views.filters import InstituteNoticesDateFilterViewSet
 
 notice_list = NoticeViewSet.as_view({
     'get': 'list',
@@ -35,6 +37,10 @@ star_filter_view = StarFilterViewSet.as_view({
 permissions = BannerPermissionViewSet.as_view({
     'get': 'list'
 })
+institute_date_filter_view = InstituteNoticesDateFilterViewSet.as_view({
+    'get': 'list'
+})
+
 
 urlpatterns = [
     url(r'new/$', notice_list),
@@ -48,4 +54,5 @@ urlpatterns = [
     url(r'star_filter_view/', star_filter_view),
     url(r'permissions/', permissions),
     url(r'copy_media/', CopyMedia.as_view(), name='copy_media'),
+    url(r'institute_notices/', institute_date_filter_view)
 ]

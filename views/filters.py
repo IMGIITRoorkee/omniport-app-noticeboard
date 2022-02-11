@@ -5,16 +5,16 @@ from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticatedOrReadOnly
 
 from categories.models import Category
-from noticeboard.serializers import (
-    MainCategorySerializer,
-    NoticeListSerializer,
-)
-from noticeboard.utils.filters import filter_search
 from noticeboard.models import (
-    Notice,
     Banner,
+    Notice,
     NoticeUser
 )
+from noticeboard.serializers import (
+    MainCategorySerializer,
+    NoticeListSerializer
+)
+from noticeboard.utils.filters import filter_search
 
 
 class FilterListViewSet(viewsets.ReadOnlyModelViewSet):
@@ -145,6 +145,48 @@ class DateFilterViewSet(viewsets.ReadOnlyModelViewSet):
 
         # Search
         queryset = filter_search(data, queryset)
+        return queryset
+
+
+class InstituteNoticesDateFilterViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    This view filters the institute notices according to the start and
+    end date
+
+    This view takes the following GET Parameters:
+    1. 'start': Start date
+    2. 'end': End date
+    """
+
+    serializer_class = NoticeListSerializer
+    permission_classes = [IsAuthenticatedOrReadOnly, ]
+
+    def get_queryset(self):
+        data = self.request.query_params
+
+        # Filter corresponding to a date
+        start_date, end_date = data.get('start', None), data.get('end', None)
+        
+        category_node = Category.objects.get(slug='noticeboard__authorities__pic')
+        banner_object = Banner.objects.get(category_node=category_node)
+
+        queryset = Notice.objects.filter(
+            is_draft=False
+        ).exclude(
+            banner=banner_object
+        ).order_by(
+            '-datetime_modified'
+        )
+        
+        if(start_date is not None):
+            start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d').date()
+            end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d').date()
+            end_date = datetime.datetime.combine(end_date, datetime.time.max)
+            queryset = queryset.filter(datetime_created__range=(
+                start_date,
+                end_date
+            ))
+        
         return queryset
 
 

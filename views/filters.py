@@ -76,8 +76,13 @@ class FilterViewSet(viewsets.ReadOnlyModelViewSet):
 
             banners = Banner.objects.filter(category_node__in=category_nodes)
             queryset = Notice.objects.filter(banner__in=banners)
+
         else:
             raise Http404
+
+        ip_address_rings = self.request.ip_address_rings
+        if ('internet' in ip_address_rings) and (len(ip_address_rings) <= 1):
+            queryset = queryset.filter(isPublic=True)
 
         queryset = filter_search(data, queryset)
         return queryset
@@ -127,6 +132,10 @@ class DateFilterViewSet(viewsets.ReadOnlyModelViewSet):
             end_date
         ))
 
+        ip_address_rings = self.request.ip_address_rings
+        if ('internet' in ip_address_rings) and (len(ip_address_rings) <= 1):
+            queryset = queryset.filter(is_public=True)
+
         # Filter corresponding to a banner or main category of banners
         banner_id = data.get('banner', None)
         main_category_slug = data.get('main_category', None)
@@ -172,11 +181,7 @@ class InstituteNoticesDateFilterViewSet(viewsets.ReadOnlyModelViewSet):
 
         queryset = Notice.objects.filter(
             is_draft=False
-        ).exclude(
-            banner=banner_object
-        ).order_by(
-            '-datetime_modified'
-        )
+        ).exclude(banner=banner_object).order_by('-datetime_modified')
         
         if(start_date is not None):
             start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d').date()
@@ -186,6 +191,12 @@ class InstituteNoticesDateFilterViewSet(viewsets.ReadOnlyModelViewSet):
                 start_date,
                 end_date
             ))
+
+        ip_address_rings = self.request.ip_address_rings
+        if ('internet' in ip_address_rings) and (len(ip_address_rings) <= 1):
+            queryset = queryset.filter(
+                is_public=True
+            )
         
         return queryset
 
@@ -200,12 +211,16 @@ class StarFilterViewSet(viewsets.ReadOnlyModelViewSet):
 
     def get_queryset(self):
         person = self.request.person
+        ip_address_rings = self.request.ip_address_rings
 
         notice_user, created = NoticeUser.objects.get_or_create(person=person)
         try:
-            queryset = notice_user.starred_notices.all().order_by(
-                '-datetime_modified'
-            )
+            queryset = notice_user.starred_notices
+            if ('internet' in ip_address_rings) and (len(ip_address_rings) <= 1):
+                queryset = queryset.filter(
+                    is_public=True
+                )
+            queryset = queryset.order_by('-datetime_modified')
         except Exception:
             queryset = Notice.objects.none()
         return queryset

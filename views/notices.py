@@ -60,11 +60,7 @@ class NoticeViewSet(viewsets.ModelViewSet):
                 banner_object = Banner.objects.get(category_node=category_node)
                 queryset = Notice.objects.filter(
                     is_draft=False
-                ).exclude(
-                    banner=banner_object
-                ).order_by(
-                    '-datetime_modified'
-                )
+                ).exclude(banner=banner_object).order_by('-datetime_modified')
 
             elif keyword:
                 search_vector = SearchVector('title', 'content')
@@ -74,13 +70,12 @@ class NoticeViewSet(viewsets.ModelViewSet):
                     search=SearchQuery(keyword)
                 ).filter(
                     is_draft=False
-                ).order_by(
-                    '-datetime_modified'
-                )
+                ).order_by('-datetime_modified')
 
             else:
-                queryset = Notice.objects.filter(is_draft=False).order_by(
-                    '-datetime_modified')
+                queryset = Notice.objects.filter(
+                    is_draft=False
+                ).order_by('-datetime_modified')
 
         elif self.action in ['retrieve', 'update', 'destroy']:
             """
@@ -104,6 +99,12 @@ class NoticeViewSet(viewsets.ModelViewSet):
             """
             queryset = queryset.exclude(
                 read_notice_set__person=self.request.person
+            )
+
+        ip_address_rings = self.request.ip_address_rings
+        if ('internet' in ip_address_rings) and (len(ip_address_rings) <= 1):
+            queryset = queryset.filter(
+                is_public=True
             )
 
         return queryset
@@ -228,7 +229,7 @@ class ExpiredNoticeViewSet(viewsets.ModelViewSet):
     """
 
     lookup_field = 'notice_id'
-    permission_classes = [IsAuthenticatedOrReadOnly, IsUploader]
+    permission_classes = [IsAuthenticatedOrReadOnly, IsUploader, isPublicInternet]
     http_method_names = ['get', 'delete']
 
     def get_queryset(self):
@@ -240,8 +241,16 @@ class ExpiredNoticeViewSet(viewsets.ModelViewSet):
                 search=search_vector
             ).filter(search=keyword).filter(is_draft=False)
         else:
-            queryset = ExpiredNotice.objects.filter(is_draft=False).order_by(
-                'datetime_modified')
+            queryset = ExpiredNotice.objects.filter(
+                is_draft=False
+            ).order_by('datetime_modified')
+
+        ip_address_rings = self.request.ip_address_rings
+        if ('internet' in ip_address_rings) and (len(ip_address_rings) <= 1):
+            queryset = queryset.filter(
+                is_public=True
+            )
+
         return queryset
 
     def get_serializer_class(self):

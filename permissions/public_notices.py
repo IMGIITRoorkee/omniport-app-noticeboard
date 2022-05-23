@@ -1,7 +1,5 @@
 from rest_framework.permissions import BasePermission
 
-from omniport.settings.configuration.base import CONFIGURATION
-
 
 class isPublicInternet(BasePermission):
     """

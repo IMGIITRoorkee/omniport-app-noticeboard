@@ -82,7 +82,7 @@ class FilterViewSet(viewsets.ReadOnlyModelViewSet):
 
         ip_address_rings = self.request.ip_address_rings
         if ('internet' in ip_address_rings) and (len(ip_address_rings) <= 1):
-            queryset = queryset.filter(isPublic=True)
+            queryset = queryset.filter(is_public=True)
 
         queryset = filter_search(data, queryset)
         return queryset

@@ -1,6 +1,7 @@
 import logging
 
-from django.contrib.postgres.search import SearchVector, SearchQuery
+from django.contrib.postgres.search import TrigramWordSimilarity
+from django.db.models.functions import Greatest
 from rest_framework import viewsets
 from rest_framework import status
 from rest_framework.response import Response
@@ -63,12 +64,10 @@ class NoticeViewSet(viewsets.ModelViewSet):
                 ).exclude(banner=banner_object).order_by('-datetime_modified')
 
             elif keyword:
-                search_vector = SearchVector('title', 'content')
                 queryset = Notice.objects.annotate(
-                    search=search_vector
-                ).filter(
-                    search=SearchQuery(keyword)
-                ).filter(
+                    similarity=Greatest(TrigramWordSimilarity(keyword, 'content'),
+                    TrigramWordSimilarity(keyword, 'title'))
+                ).filter(similarity__gte=0.5).filter(
                     is_draft=False
                 ).order_by('-datetime_modified')
 
@@ -236,10 +235,11 @@ class ExpiredNoticeViewSet(viewsets.ModelViewSet):
         keyword = self.request.query_params.get('keyword', None)
 
         if keyword:
-            search_vector = SearchVector('title', 'content')
-            queryset = ExpiredNotice.objects.annotate(
-                search=search_vector
-            ).filter(search=keyword).filter(is_draft=False)
+            queryset = Notice.objects.annotate(
+                similarity=Greatest(TrigramWordSimilarity(keyword, 'content'),
+                TrigramWordSimilarity(keyword, 'title'))
+            ).filter(similarity__gte=0.5).filter(is_draft=False)
+            
         else:
             queryset = ExpiredNotice.objects.filter(
                 is_draft=False

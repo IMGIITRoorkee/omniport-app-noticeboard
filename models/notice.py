@@ -114,3 +114,7 @@ class ExpiredNotice(AbstractNotice):
         related_name='uploaded_notices_expired',
         on_delete=models.CASCADE,
     )
+    
+    notice_created_on = models.DateTimeField(
+        null = True
+    )

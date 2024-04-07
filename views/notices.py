@@ -63,7 +63,7 @@ class NoticeViewSet(viewsets.ModelViewSet):
                 ).exclude(banner=banner_object).order_by('-datetime_modified')
 
             elif keyword:
-                search_vector = SearchVector('title', 'content')
+                search_vector = SearchVector('title')
                 queryset = Notice.objects.annotate(
                     search=search_vector
                 ).filter(

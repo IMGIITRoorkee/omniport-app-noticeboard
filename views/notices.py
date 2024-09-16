@@ -1,4 +1,5 @@
 import logging
+from elasticsearch_dsl.query import Q
 
 from django.contrib.postgres.search import SearchVector, SearchQuery
 from rest_framework import viewsets
@@ -16,6 +17,7 @@ from noticeboard.serializers.notices import *
 from noticeboard.models import *
 from categories.models import Category
 from noticeboard.permissions import IsUploader, isPublicInternet
+from noticeboard.documents import NoticeDocument
 from noticeboard.pagination import NoticesPageNumberPagination
 from notifications.actions import push_notification
 
@@ -67,16 +69,34 @@ class NoticeViewSet(viewsets.ModelViewSet):
                 )
 
             elif keyword:
-                search_vector = SearchVector('title', 'content')
-                queryset = Notice.objects.annotate(
-                    search=search_vector
-                ).filter(
-                    search=SearchQuery(keyword)
-                ).filter(
-                    is_draft=False
-                ).order_by(
-                    '-datetime_modified'
-                )
+                page = self.request.query_params.get('page',None)
+                fuzzy_query = Q('fuzzy', title={'value': keyword, 'fuzziness': 'AUTO'})
+                wildcard_query = Q('wildcard', title=f'*{keyword}*')
+                draft_filter = Q('term', is_draft=False)
+                page_size = 10
+                from_value = (int(page) - 1) * page_size
+                search = NoticeDocument.search().query(
+                    'bool',
+                    must=[draft_filter],  # Ensure is_draft is false
+                    should=[fuzzy_query, wildcard_query],
+                    minimum_should_match=1  # At least one of the search queries must match
+                )[from_value:from_value + page_size]
+                search_results = search.execute()
+                notice_id_list = []
+                for hit in search_results:
+                    notice_id_list.append(hit.id)
+                print(notice_id_list)
+                queryset = Notice.objects.filter(id__in = notice_id_list)
+                # search_vector = SearchVector('title', 'content')
+                # queryset = Notice.objects.annotate(
+                #     search=search_vector
+                # ).filter(
+                #     search=SearchQuery(keyword)
+                # ).filter(
+                #     is_draft=False
+                # ).order_by(
+                #     '-datetime_modified'
+                # )
 
             else:
                 queryset = Notice.objects.filter(is_draft=False).order_by(

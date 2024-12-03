@@ -10,6 +10,7 @@ from noticeboard.utils.notices import (
     get_drafted_notices, has_super_upload_right
 )
 from noticeboard.utils.get_recipients import get_recipients
+from noticeboard.utils.is_passed import is_passed
 from noticeboard.utils.send_email import send_email
 from noticeboard.utils.send_push_notification import send_push_notification
 from noticeboard.serializers.notices import *
@@ -41,6 +42,7 @@ class NoticeViewSet(viewsets.ModelViewSet):
         keyword = self.request.query_params.get('keyword', None)
         important_only = self.request.query_params.get('important', False)
         unread_only = self.request.query_params.get('unread', False)
+        person = self.request.person
 
         queryset = Notice.objects.none()
 
@@ -67,6 +69,8 @@ class NoticeViewSet(viewsets.ModelViewSet):
                 )
 
             elif keyword:
+                category_node = Category.objects.get(slug='noticeboard__authorities__pic')
+                banner_object = Banner.objects.get(category_node=category_node)
                 search_vector = SearchVector('title', 'content')
                 queryset = Notice.objects.annotate(
                     search=search_vector
@@ -77,19 +81,29 @@ class NoticeViewSet(viewsets.ModelViewSet):
                 ).order_by(
                     '-datetime_modified'
                 )
+                if is_passed(person):
+                    queryset = queryset.exclude(banner = banner_object)
 
             else:
+                category_node = Category.objects.get(slug='noticeboard__authorities__pic')
+                banner_object = Banner.objects.get(category_node=category_node)
                 queryset = Notice.objects.filter(is_draft=False).order_by(
                     '-datetime_modified')
+                if is_passed(person):
+                    queryset = queryset.exclude(banner = banner_object)
 
         elif self.action in ['retrieve', 'update', 'destroy']:
             """
             The users would be able to view the draft if they are authenticated
             """
 
+            category_node = Category.objects.get(slug='noticeboard__authorities__pic')
+            banner_object = Banner.objects.get(category_node=category_node)
             drafted_notices = get_drafted_notices(self.request)
             all_notices = Notice.objects.filter(is_draft=False)
             queryset = (all_notices | drafted_notices).distinct()
+            if is_passed(person):
+                queryset = queryset.exclude(banner = banner_object)
 
         if important_only:
             """

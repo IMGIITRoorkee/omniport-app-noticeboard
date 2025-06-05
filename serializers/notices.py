@@ -37,7 +37,7 @@ class NoticeDetailSerializer(ModelSerializer):
 
     class Meta:
         model = Notice
-        fields = ('id', 'title', 'datetime_modified', 'content',
+        fields = ('id', 'title', 'datetime_created', 'datetime_modified', 'content',
                   'is_draft', 'is_edited', 'is_important', 'is_public',
                   'banner', 'read', 'starred', 'uploader', 'expiry_date')
 

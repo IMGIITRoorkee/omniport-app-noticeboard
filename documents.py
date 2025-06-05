@@ -5,6 +5,8 @@ from django_elasticsearch_dsl.registries import registry
 
 @registry.register_document
 class NoticeDocument(Document):
+    # datetime_modified = fields.DateField()
+    datetime_created = fields.DateField()
     
     class Index:
         name = "notice"
@@ -20,4 +22,5 @@ class NoticeDocument(Document):
             "title",
             "is_draft",
         ]
+
     

@@ -80,23 +80,13 @@ class NoticeViewSet(viewsets.ModelViewSet):
                     must=[draft_filter],  # Ensure is_draft is false
                     should=[fuzzy_query, wildcard_query],
                     minimum_should_match=1  # At least one of the search queries must match
-                )[from_value:from_value + page_size]
+                ).sort('-datetime_created')[from_value:from_value + page_size]  # Sort by creation date
                 search_results = search.execute()
                 notice_id_list = []
                 for hit in search_results:
                     notice_id_list.append(hit.id)
                 print(notice_id_list)
-                queryset = Notice.objects.filter(id__in = notice_id_list)
-                # search_vector = SearchVector('title', 'content')
-                # queryset = Notice.objects.annotate(
-                #     search=search_vector
-                # ).filter(
-                #     search=SearchQuery(keyword)
-                # ).filter(
-                #     is_draft=False
-                # ).order_by(
-                #     '-datetime_modified'
-                # )
+                queryset = Notice.objects.filter(id__in=notice_id_list).order_by('-datetime_created')
 
             else:
                 queryset = Notice.objects.filter(is_draft=False).order_by(

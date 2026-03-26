@@ -62,45 +62,86 @@ class NoticeViewSet(viewsets.ModelViewSet):
                 banner_object = Banner.objects.get(category_node=category_node)
                 queryset = Notice.objects.filter(
                     is_draft=False
-                ).exclude(
-                    banner=banner_object
-                ).order_by(
-                    '-datetime_modified'
-                )
+                ).exclude(banner=banner_object).order_by('-datetime_modified')
 
             elif keyword:
-                page = self.request.query_params.get('page',None)
-                fuzzy_query = Q('fuzzy', title={'value': keyword, 'fuzziness': 'AUTO'})
-                wildcard_query = Q('wildcard', title=f'*{keyword}*')
-                draft_filter = Q('term', is_draft=False)
+                from elasticsearch import Elasticsearch
+                from elasticsearch_dsl import Search, Q as ES_Q
+                
+                page = self.request.query_params.get('page', None)
+                page = int(page) if page else 1
                 page_size = 10
-                from_value = (int(page) - 1) * page_size
-                search = NoticeDocument.search().query(
-                    'bool',
-                    must=[draft_filter],  # Ensure is_draft is false
-                    should=[fuzzy_query, wildcard_query],
-                    minimum_should_match=1  # At least one of the search queries must match
-                )[from_value:from_value + page_size]
-                search_results = search.execute()
+                from_value = (page - 1) * page_size
+                
+                es = Elasticsearch(['http://elastic:9200'])
+                
+                keyword_lower = keyword.lower()
+                has_special_chars = any(char in keyword for char in ['#', '@', '$', '%', '&', '*'])
+                
+                should_clauses = []
+                should_clauses.append(ES_Q('match_phrase', title=keyword))
+                should_clauses.append(ES_Q('match_phrase', content=keyword))
+                
+                draft_filter = ES_Q('term', is_draft=False)
+                query = ES_Q('bool',
+                    must=[draft_filter],
+                    should=should_clauses,
+                    minimum_should_match=1
+                )
+                logger.info(f"DEBUG: Query dict for '{keyword}': {query.to_dict()}")
+                search_results = es.search(
+                    index='notice',
+                    body={
+                        'query': query.to_dict(),
+                        'from': 0,
+                        'size': 10000
+                    }
+                )
+                
                 notice_id_list = []
-                for hit in search_results:
-                    notice_id_list.append(hit.id)
-                print(notice_id_list)
-                queryset = Notice.objects.filter(id__in = notice_id_list)
-                # search_vector = SearchVector('title', 'content')
-                # queryset = Notice.objects.annotate(
-                #     search=search_vector
-                # ).filter(
-                #     search=SearchQuery(keyword)
-                # ).filter(
-                #     is_draft=False
-                # ).order_by(
-                #     '-datetime_modified'
-                # )
+                for hit in search_results['hits']['hits']:
+                    notice_id_list.append(hit['_source']['id'])
+                
+                if notice_id_list:
+                    queryset = Notice.objects.filter(id__in=notice_id_list)
+                else:
+                    if has_special_chars:
+                        queryset = Notice.objects.none()
+                    else:
+                        should_clauses = [
+                            ES_Q('match_phrase', title=keyword),
+                            ES_Q('match_phrase', content=keyword),
+                            ES_Q('wildcard', title=f'*{keyword_lower}*'),
+                            ES_Q('wildcard', content=f'*{keyword_lower}*'),
+                            ES_Q('fuzzy', title={'value': keyword, 'fuzziness': 'AUTO'}),
+                            ES_Q('fuzzy', content={'value': keyword, 'fuzziness': 'AUTO'})
+                        ]
+                        
+                        query = ES_Q('bool',
+                            must=[draft_filter],
+                            should=should_clauses,
+                            minimum_should_match=1
+                        )
+                        
+                        search_results = es.search(
+                            index='notice',
+                            body={
+                                'query': query.to_dict(),
+                                'from': 0,
+                                'size': 10000
+                            }
+                        )
+                        
+                        notice_id_list = []
+                        for hit in search_results['hits']['hits']:
+                            notice_id_list.append(hit['_source']['id'])
+                        
+                        queryset = Notice.objects.filter(id__in=notice_id_list) if notice_id_list else Notice.objects.none()
 
             else:
-                queryset = Notice.objects.filter(is_draft=False).order_by(
-                    '-datetime_modified')
+                queryset = Notice.objects.filter(
+                    is_draft=False
+                ).order_by('-datetime_modified')
 
         elif self.action in ['retrieve', 'update', 'destroy']:
             """
@@ -124,6 +165,12 @@ class NoticeViewSet(viewsets.ModelViewSet):
             """
             queryset = queryset.exclude(
                 read_notice_set__person=self.request.person
+            )
+
+        ip_address_rings = self.request.ip_address_rings
+        if ('internet' in ip_address_rings) and (len(ip_address_rings) <= 1):
+            queryset = queryset.filter(
+                is_public=True
             )
 
         return queryset
@@ -248,7 +295,7 @@ class ExpiredNoticeViewSet(viewsets.ModelViewSet):
     """
 
     lookup_field = 'notice_id'
-    permission_classes = [IsAuthenticatedOrReadOnly, IsUploader]
+    permission_classes = [IsAuthenticatedOrReadOnly, IsUploader, isPublicInternet]
     http_method_names = ['get', 'delete']
 
     def get_queryset(self):
@@ -260,8 +307,16 @@ class ExpiredNoticeViewSet(viewsets.ModelViewSet):
                 search=search_vector
             ).filter(search=keyword).filter(is_draft=False)
         else:
-            queryset = ExpiredNotice.objects.filter(is_draft=False).order_by(
-                'datetime_modified')
+            queryset = ExpiredNotice.objects.filter(
+                is_draft=False
+            ).order_by('datetime_modified')
+
+        ip_address_rings = self.request.ip_address_rings
+        if ('internet' in ip_address_rings) and (len(ip_address_rings) <= 1):
+            queryset = queryset.filter(
+                is_public=True
+            )
+
         return queryset
 
     def get_serializer_class(self):

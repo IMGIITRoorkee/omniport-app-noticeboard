@@ -5,16 +5,16 @@ from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticatedOrReadOnly
 
 from categories.models import Category
-from noticeboard.serializers import (
-    MainCategorySerializer,
-    NoticeListSerializer,
-)
-from noticeboard.utils.filters import filter_search
 from noticeboard.models import (
-    Notice,
     Banner,
+    Notice,
     NoticeUser
 )
+from noticeboard.serializers import (
+    MainCategorySerializer,
+    NoticeListSerializer
+)
+from noticeboard.utils.filters import filter_search
 
 
 class FilterListViewSet(viewsets.ReadOnlyModelViewSet):
@@ -76,8 +76,13 @@ class FilterViewSet(viewsets.ReadOnlyModelViewSet):
 
             banners = Banner.objects.filter(category_node__in=category_nodes)
             queryset = Notice.objects.filter(banner__in=banners)
+
         else:
             raise Http404
+
+        ip_address_rings = self.request.ip_address_rings
+        if ('internet' in ip_address_rings) and (len(ip_address_rings) <= 1):
+            queryset = queryset.filter(is_public=True)
 
         queryset = filter_search(data, queryset)
         return queryset
@@ -127,6 +132,10 @@ class DateFilterViewSet(viewsets.ReadOnlyModelViewSet):
             end_date
         ))
 
+        ip_address_rings = self.request.ip_address_rings
+        if ('internet' in ip_address_rings) and (len(ip_address_rings) <= 1):
+            queryset = queryset.filter(is_public=True)
+
         # Filter corresponding to a banner or main category of banners
         banner_id = data.get('banner', None)
         main_category_slug = data.get('main_category', None)
@@ -148,6 +157,50 @@ class DateFilterViewSet(viewsets.ReadOnlyModelViewSet):
         return queryset
 
 
+class InstituteNoticesDateFilterViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    This view filters the institute notices according to the start and
+    end date
+
+    This view takes the following GET Parameters:
+    1. 'start': Start date
+    2. 'end': End date
+    """
+
+    serializer_class = NoticeListSerializer
+    permission_classes = [IsAuthenticatedOrReadOnly, ]
+
+    def get_queryset(self):
+        data = self.request.query_params
+
+        # Filter corresponding to a date
+        start_date, end_date = data.get('start', None), data.get('end', None)
+        
+        category_node = Category.objects.get(slug='noticeboard__authorities__pic')
+        banner_object = Banner.objects.get(category_node=category_node)
+
+        queryset = Notice.objects.filter(
+            is_draft=False
+        ).exclude(banner=banner_object).order_by('-datetime_modified')
+        
+        if(start_date is not None):
+            start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d').date()
+            end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d').date()
+            end_date = datetime.datetime.combine(end_date, datetime.time.max)
+            queryset = queryset.filter(datetime_created__range=(
+                start_date,
+                end_date
+            ))
+
+        ip_address_rings = self.request.ip_address_rings
+        if ('internet' in ip_address_rings) and (len(ip_address_rings) <= 1):
+            queryset = queryset.filter(
+                is_public=True
+            )
+        
+        return queryset
+
+
 class StarFilterViewSet(viewsets.ReadOnlyModelViewSet):
     """
     This view returns all the starred notices of a notice user
@@ -158,12 +211,16 @@ class StarFilterViewSet(viewsets.ReadOnlyModelViewSet):
 
     def get_queryset(self):
         person = self.request.person
+        ip_address_rings = self.request.ip_address_rings
 
         notice_user, created = NoticeUser.objects.get_or_create(person=person)
         try:
-            queryset = notice_user.starred_notices.all().order_by(
-                '-datetime_modified'
-            )
+            queryset = notice_user.starred_notices
+            if ('internet' in ip_address_rings) and (len(ip_address_rings) <= 1):
+                queryset = queryset.filter(
+                    is_public=True
+                )
+            queryset = queryset.order_by('-datetime_modified')
         except Exception:
             queryset = Notice.objects.none()
         return queryset

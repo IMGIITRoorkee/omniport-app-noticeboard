@@ -2,6 +2,7 @@ import re
 import os
 import shutil
 import tempfile
+import hashlib
 
 from django.conf import settings
 from pdf2image import convert_from_path
@@ -33,10 +34,12 @@ class CopyMedia(APIView):
         :return:
         """
         try:
+            user = request.user.username
             path = request.data['path'].strip('/')
             source = os.path.normpath(os.path.join(settings.NETWORK_STORAGE_ROOT, path))
-
             filename = path.split('/')[-1]
+            file = os.path.splitext(filename)
+            filename = user + '_' + hashlib.md5(str(file[0]).encode('utf-8')).hexdigest() + file[1]
             app_name = Config.name
             app_media = os.path.join(settings.MEDIA_DIR, app_name)
             os.makedirs(app_media, exist_ok=True)

@@ -1,7 +1,6 @@
 import logging
-from elasticsearch_dsl.query import Q
 
-from django.contrib.postgres.search import SearchVector, SearchQuery
+from django.contrib.postgres.search import SearchVector
 from rest_framework import viewsets
 from rest_framework import status
 from rest_framework.response import Response
@@ -17,12 +16,12 @@ from noticeboard.serializers.notices import *
 from noticeboard.models import *
 from categories.models import Category
 from noticeboard.permissions import IsUploader, isPublicInternet
-from noticeboard.documents import NoticeDocument
+from noticeboard.documents import sync_notice_document, remove_notice_document
 from noticeboard.pagination import NoticesPageNumberPagination
-from notifications.actions import push_notification
 
 logger = logging.getLogger('noticeboard')
 
+MAX_SEARCH_RESULTS = 10000
 
 class NoticeViewSet(viewsets.ModelViewSet):
     """
@@ -66,77 +65,119 @@ class NoticeViewSet(viewsets.ModelViewSet):
 
             elif keyword:
                 from elasticsearch import Elasticsearch
-                from elasticsearch_dsl import Search, Q as ES_Q
-                
-                page = self.request.query_params.get('page', None)
-                page = int(page) if page else 1
-                page_size = 10
-                from_value = (page - 1) * page_size
-                
+                from elasticsearch_dsl import Q as ES_Q
+                from django.db.models import Case, When
+
                 es = Elasticsearch(['http://elastic:9200'])
-                
-                keyword_lower = keyword.lower()
-                has_special_chars = any(char in keyword for char in ['#', '@', '$', '%', '&', '*'])
-                
-                should_clauses = []
-                should_clauses.append(ES_Q('match_phrase', title=keyword))
-                should_clauses.append(ES_Q('match_phrase', content=keyword))
-                
+
+                normalized_keyword = keyword.replace('_', ' ')
+                keyword_lower = normalized_keyword.lower()
+
                 draft_filter = ES_Q('term', is_draft=False)
-                query = ES_Q('bool',
-                    must=[draft_filter],
-                    should=should_clauses,
-                    minimum_should_match=1
-                )
-                logger.info(f"DEBUG: Query dict for '{keyword}': {query.to_dict()}")
-                search_results = es.search(
-                    index='notice',
-                    body={
-                        'query': query.to_dict(),
-                        'from': 0,
-                        'size': 10000
-                    }
-                )
-                
-                notice_id_list = []
-                for hit in search_results['hits']['hits']:
-                    notice_id_list.append(hit['_source']['id'])
-                
-                if notice_id_list:
-                    queryset = Notice.objects.filter(id__in=notice_id_list)
-                else:
-                    if has_special_chars:
-                        queryset = Notice.objects.none()
-                    else:
-                        should_clauses = [
-                            ES_Q('match_phrase', title=keyword),
-                            ES_Q('match_phrase', content=keyword),
-                            ES_Q('wildcard', title=f'*{keyword_lower}*'),
-                            ES_Q('wildcard', content=f'*{keyword_lower}*'),
-                            ES_Q('fuzzy', title={'value': keyword, 'fuzziness': 'AUTO'}),
-                            ES_Q('fuzzy', content={'value': keyword, 'fuzziness': 'AUTO'})
-                        ]
-                        
-                        query = ES_Q('bool',
-                            must=[draft_filter],
-                            should=should_clauses,
-                            minimum_should_match=1
+
+                try:
+                    exact_should = [
+                        ES_Q(
+                            'multi_match',
+                            query=normalized_keyword,
+                            type='phrase',
+                            fields=['title^3', 'content'],
+                        ),
+                        ES_Q('wildcard', title=f'*{keyword_lower}*'),
+                        ES_Q('wildcard', content=f'*{keyword_lower}*'),
+                    ]
+
+                    exact_query = ES_Q(
+                        'bool',
+                        must=[draft_filter],
+                        should=exact_should,
+                        minimum_should_match=1,
+                    )
+
+                    logger.debug("Elasticsearch notice phase 1 (strict) query: %s", exact_query.to_dict())
+                    search_results = es.search(
+                        index='notice',
+                        body={
+                            'query': exact_query.to_dict(),
+                            'size': MAX_SEARCH_RESULTS,
+                        },
+                    )
+
+                    notice_id_list = [
+                        hit['_source']['id']
+                        for hit in search_results.get('hits', {}).get('hits', [])
+                    ]
+
+                    if not notice_id_list:
+                        relaxed_query = ES_Q(
+                            'multi_match',
+                            query=normalized_keyword,
+                            fields=['title^3', 'content'],
+                            type='best_fields',
+                            minimum_should_match='2<75%',
                         )
-                        
+
+                        base_query = ES_Q(
+                            'bool',
+                            must=[draft_filter, relaxed_query],
+                        )
+
+                        logger.debug("Elasticsearch notice phase 2 (relaxed) query: %s", base_query.to_dict())
                         search_results = es.search(
                             index='notice',
                             body={
-                                'query': query.to_dict(),
-                                'from': 0,
-                                'size': 10000
-                            }
+                                'query': base_query.to_dict(),
+                                'size': MAX_SEARCH_RESULTS,
+                            },
                         )
-                        
-                        notice_id_list = []
-                        for hit in search_results['hits']['hits']:
-                            notice_id_list.append(hit['_source']['id'])
-                        
-                        queryset = Notice.objects.filter(id__in=notice_id_list) if notice_id_list else Notice.objects.none()
+
+                        notice_id_list = [
+                            hit['_source']['id']
+                            for hit in search_results.get('hits', {}).get('hits', [])
+                        ]
+
+                    if not notice_id_list:
+                        fuzzy_query = ES_Q(
+                            'multi_match',
+                            query=normalized_keyword,
+                            fields=['title^3', 'content'],
+                            fuzziness='AUTO',
+                            prefix_length=1,
+                            max_expansions=50,
+                        )
+
+                        base_query = ES_Q(
+                            'bool',
+                            must=[draft_filter, fuzzy_query],
+                        )
+
+                        logger.debug("Elasticsearch notice phase 3 (fuzzy) query: %s", base_query.to_dict())
+                        search_results = es.search(
+                            index='notice',
+                            body={
+                                'query': base_query.to_dict(),
+                                'size': MAX_SEARCH_RESULTS,
+                            },
+                        )
+
+                        notice_id_list = [
+                            hit['_source']['id']
+                            for hit in search_results.get('hits', {}).get('hits', [])
+                        ]
+
+                    if notice_id_list:
+                        order_cases = [
+                            When(id=pk, then=pos)
+                            for pos, pk in enumerate(notice_id_list)
+                        ]
+                        order_by_case = Case(*order_cases)
+                        queryset = Notice.objects.filter(id__in=notice_id_list).order_by(order_by_case)
+                    else:
+                        queryset = Notice.objects.none()
+
+                except Exception as exc:
+                    logger.error("Elasticsearch notice search failed: %s", exc, exc_info=True)
+                    queryset = Notice.objects.none()
 
             else:
                 queryset = Notice.objects.filter(
@@ -194,6 +235,15 @@ class NoticeViewSet(viewsets.ModelViewSet):
         if serializer.is_valid():
             person = self.request.person
             notice = serializer.save(uploader=person)
+            try:
+                sync_notice_document(notice)
+            except Exception as exc:
+                logger.error(
+                    'Failed to sync notice #%s to Elasticsearch on create: %s',
+                    notice.id,
+                    exc,
+                    exc_info=True,
+                )
             category = notice.banner.category_node
             logger.info(f'Notice #{notice.id} uploaded successfully by '
                         f'{self.request.person}')
@@ -241,7 +291,16 @@ class NoticeViewSet(viewsets.ModelViewSet):
 
         if serializer.is_valid():
             person = self.request.person
-            serializer.save(uploader=person)
+            notice = serializer.save(uploader=person)
+            try:
+                sync_notice_document(notice)
+            except Exception as exc:
+                logger.error(
+                    'Failed to sync notice #%s to Elasticsearch on update: %s',
+                    notice.id,
+                    exc,
+                    exc_info=True,
+                )
             category = notice.banner.category_node
             # Remove this notice from all users' read notices set
             notice.read_notice_set.clear()
@@ -284,6 +343,24 @@ class NoticeViewSet(viewsets.ModelViewSet):
         logger.warning(f'Request to update notice #{notice.id} denied for '
                        f'{self.request.person}')
         return Response(status=status.HTTP_400_BAD_REQUEST)
+
+    def destroy(self, request, *args, **kwargs):
+        notice = self.get_object()
+        notice_id = notice.id
+
+        self.perform_destroy(notice)
+
+        try:
+            remove_notice_document(notice_id)
+        except Exception as exc:
+            logger.error(
+                'Failed to remove notice #%s from Elasticsearch on delete: %s',
+                notice_id,
+                exc,
+                exc_info=True,
+            )
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class ExpiredNoticeViewSet(viewsets.ModelViewSet):

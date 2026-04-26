@@ -33,18 +33,12 @@ def strip_html_tags(html_content):
 @registry.register_document
 class NoticeDocument(Document):
 
-    title = fields.Text()
-    content = fields.Text()
-
     class Index:
         name = 'notice'
 
     class Django:
         model = Notice
-        fields = ('id', 'is_draft')
-
-    def prepare_title(self, instance):
-        return instance.title or ''
+        fields = ('id', 'is_draft', 'title', 'content')
 
     def prepare_content(self, instance):
         return strip_html_tags(instance.content or '')

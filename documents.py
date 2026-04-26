@@ -33,18 +33,30 @@ def strip_html_tags(html_content):
 @registry.register_document
 class NoticeDocument(Document):
 
+    # Notice.content is a tinymce.models.HTMLField, which is not in
+    # django-elasticsearch-dsl's model_field_class_to_field_class map.
+    # Declare it explicitly so the ES mapping is `text`; population
+    # happens in prepare() below.
+    content = fields.Text()
+
     class Index:
         name = 'notice'
 
     class Django:
         model = Notice
-        fields = ('id', 'is_draft', 'title', 'content')
+        fields = ('id', 'is_draft', 'title')
 
-    def prepare_content(self, instance):
-        return strip_html_tags(instance.content or '')
+    def prepare(self, instance):
+        # django-elasticsearch-dsl 7.1.1's Document.prepare() only walks
+        # fields listed in Django.fields, not class-level declarations.
+        # Add content manually so it lands in the indexed document, with
+        # HTML tags stripped so search runs against tokenized prose.
+        data = super().prepare(instance)
+        data['content'] = strip_html_tags(instance.content or '')
+        return data
 
     def save(self, **kwargs):
-        #Strip HTML from the content before saving
+        # Strip HTML on the individual-save path (sync_notice_document → .save())
         self.content = strip_html_tags(self.content if self.content else '')
         return super().save(**kwargs)
 

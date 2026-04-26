@@ -1,6 +1,7 @@
 from html.parser import HTMLParser
 from noticeboard.models import Notice
 from django_elasticsearch_dsl import Document, fields
+from django_elasticsearch_dsl.registries import registry
 
 
 class HTMLStripper(HTMLParser):
@@ -29,8 +30,9 @@ def strip_html_tags(html_content):
         return html_content
 
 
+@registry.register_document
 class NoticeDocument(Document):
-    
+
     title = fields.Text()
     content = fields.Text()
 

@@ -42,7 +42,13 @@ class NoticeDocument(Document):
     class Django:
         model = Notice
         fields = ('id', 'is_draft')
-    
+
+    def prepare_title(self, instance):
+        return instance.title or ''
+
+    def prepare_content(self, instance):
+        return strip_html_tags(instance.content or '')
+
     def save(self, **kwargs):
         #Strip HTML from the content before saving
         self.content = strip_html_tags(self.content if self.content else '')

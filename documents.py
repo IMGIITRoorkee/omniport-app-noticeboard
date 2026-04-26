@@ -41,7 +41,7 @@ class NoticeDocument(Document):
 
     class Django:
         model = Notice
-        fields = ('id', 'title', 'is_draft')
+        fields = ('id', 'is_draft')
     
     def save(self, **kwargs):
         #Strip HTML from the content before saving

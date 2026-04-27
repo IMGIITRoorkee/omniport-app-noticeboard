@@ -64,11 +64,16 @@ class NoticeViewSet(viewsets.ModelViewSet):
                 ).exclude(banner=banner_object).order_by('-datetime_modified')
 
             elif keyword:
-                from elasticsearch import Elasticsearch
                 from elasticsearch_dsl import Q as ES_Q
+                from elasticsearch_dsl.connections import connections
                 from django.db.models import Case, When
 
-                es = Elasticsearch(['http://elastic:9200'])
+                # Reuse the connection configured by ELASTICSEARCH_DSL in
+                # omniport.settings.third_party.elastic. This honors host,
+                # auth, TLS, and timeout settings driven by the environment
+                # (see noticeboard/elasticsearch.env in omniport-docker), and
+                # avoids spinning up a fresh connection pool per request.
+                es = connections.get_connection()
 
                 normalized_keyword = keyword.replace('_', ' ')
                 keyword_lower = normalized_keyword.lower()

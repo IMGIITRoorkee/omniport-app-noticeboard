@@ -1,7 +1,12 @@
 from html.parser import HTMLParser
+import logging
+
 from noticeboard.models import Notice
 from django_elasticsearch_dsl import Document, fields
 from django_elasticsearch_dsl.registries import registry
+
+
+logger = logging.getLogger('noticeboard')
 
 
 class HTMLStripper(HTMLParser):
@@ -44,7 +49,7 @@ class NoticeDocument(Document):
 
     class Django:
         model = Notice
-        fields = ('id', 'is_draft', 'title')
+        fields = ('id', 'is_draft', 'title', 'datetime_modified')
 
     def prepare(self, instance):
         # django-elasticsearch-dsl 7.1.1's Document.prepare() only walks
@@ -72,6 +77,7 @@ def sync_notice_document(notice):
         title=notice.title,
         content=notice.content,
         is_draft=notice.is_draft,
+        datetime_modified=notice.datetime_modified,
         id=notice.id,
     )
     doc.save()
@@ -82,5 +88,10 @@ def remove_notice_document(notice_id):
     try:
         client = NoticeDocument._index.get_connection()
         client.delete(index=NoticeDocument.Index.name, id=notice_id)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning(
+            'Failed to remove notice #%s from Elasticsearch index: %s',
+            notice_id,
+            exc,
+            exc_info=True,
+        )

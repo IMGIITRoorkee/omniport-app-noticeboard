@@ -123,10 +123,22 @@ class NoticeViewSet(viewsets.ModelViewSet):
                             'multi_match',
                             query=normalized_keyword,
                             type='phrase',
-                            fields=['title^3', 'content'],
+                            fields=['title^5', 'content'],
                         ),
-                        ES_Q('wildcard', title=f'*{keyword_lower}*'),
-                        ES_Q('wildcard', content=f'*{keyword_lower}*'),
+                        ES_Q(
+                            'wildcard',
+                            title={
+                                'value': f'*{keyword_lower}*',
+                                'boost': 2,
+                            },
+                        ),
+                        ES_Q(
+                            'wildcard',
+                            content={
+                                'value': f'*{keyword_lower}*',
+                                'boost': 0.5,
+                            },
+                        ),
                     ]
 
                     exact_query = ES_Q(
@@ -166,7 +178,7 @@ class NoticeViewSet(viewsets.ModelViewSet):
                         relaxed_query = ES_Q(
                             'multi_match',
                             query=normalized_keyword,
-                            fields=['title^3', 'content'],
+                            fields=['title^5', 'content'],
                             type='best_fields',
                             minimum_should_match='2<75%',
                         )
@@ -206,7 +218,7 @@ class NoticeViewSet(viewsets.ModelViewSet):
                         fuzzy_query = ES_Q(
                             'multi_match',
                             query=normalized_keyword,
-                            fields=['title^3', 'content'],
+                            fields=['title^5', 'content'],
                             fuzziness='AUTO',
                             prefix_length=1,
                             max_expansions=50,

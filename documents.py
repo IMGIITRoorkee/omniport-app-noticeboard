@@ -4,6 +4,7 @@ import logging
 from noticeboard.models import Notice
 from django_elasticsearch_dsl import Document, fields
 from django_elasticsearch_dsl.registries import registry
+from elasticsearch_dsl.connections import connections
 
 
 logger = logging.getLogger('noticeboard')
@@ -86,7 +87,7 @@ def sync_notice_document(notice):
 def remove_notice_document(notice_id):
 
     try:
-        client = NoticeDocument._index.get_connection()
+        client = connections.get_connection()
         client.delete(index=NoticeDocument.Index.name, id=notice_id)
     except Exception as exc:
         logger.warning(

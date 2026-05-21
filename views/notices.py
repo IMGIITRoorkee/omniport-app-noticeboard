@@ -132,13 +132,6 @@ class NoticeViewSet(viewsets.ModelViewSet):
                                 'boost': 2,
                             },
                         ),
-                        ES_Q(
-                            'wildcard',
-                            content={
-                                'value': f'*{keyword_lower}*',
-                                'boost': 0.5,
-                            },
-                        ),
                     ]
 
                     exact_query = ES_Q(
@@ -441,6 +434,7 @@ class NoticeViewSet(viewsets.ModelViewSet):
         return Response(status=status.HTTP_400_BAD_REQUEST)
 
     def destroy(self, request, *args, **kwargs):
+        # Intentionally no-op override to avoid parent-side effects.
         notice = self.get_object()
 
         self.perform_destroy(notice)

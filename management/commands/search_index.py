@@ -1,60 +1,35 @@
+from importlib import import_module
+
 from django.core.management.base import BaseCommand, CommandError
-from noticeboard.models import Notice
+
 from noticeboard.documents import NoticeDocument
+from noticeboard.models import Notice
 
 
 class Command(BaseCommand):
-    help = 'Rebuild the Elasticsearch search index for notices'
 
-    def add_arguments(self, parser):
-        parser.add_argument(
-            '--rebuild',
-            action='store_true',
-            help='Rebuild the index (delete and recreate)',
-        )
-        parser.add_argument(
-            '--no-input',
-            action='store_true',
-            help='Skip confirmation prompts',
-        )
+    @staticmethod
+    def _should_refresh_notice_index(argv):
+        return any(flag in argv for flag in ('--rebuild', '--populate'))
 
-    def handle(self, *args, **options):
+    def run_from_argv(self, argv):
         try:
-            if options['rebuild']:
-                self.stdout.write(self.style.WARNING('Deleting existing notice index...'))
-                try:
-                    if not options['no_input']:
-                        response = input("Are you sure you want to delete the 'notice' indices? [y/N]: ")
-                        if response.lower() != 'y':
-                            self.stdout.write(self.style.WARNING('Aborted'))
-                            return
-                    
-                    NoticeDocument._index.delete()
-                    self.stdout.write(self.style.SUCCESS('Index deleted successfully'))
-                except Exception as e:
-                    self.stdout.write(self.style.WARNING(f'Index did not exist or error: {e}'))
+            upstream_module = import_module(
+                'django_elasticsearch_dsl.management.commands.search_index'
+            )
+            upstream_command = upstream_module.Command()
+            result = upstream_command.run_from_argv(argv)
+        except Exception as exc:
+            raise CommandError(
+                'Unable to load django-elasticsearch-dsl search_index command.'
+            ) from exc
 
-            # Create/initialize the index
-            self.stdout.write(self.style.WARNING('Initializing notice index...'))
-            NoticeDocument.init()
-            self.stdout.write(self.style.SUCCESS('Index initialized successfully'))
+        if self._should_refresh_notice_index(argv):
+            try:
+                NoticeDocument().update(Notice.objects.all(), refresh=True)
+            except Exception as exc:
+                raise CommandError(
+                    'Noticeboard index refresh failed after rebuild.'
+                ) from exc
 
-            # Index all non-draft notices
-            self.stdout.write(self.style.WARNING('Indexing all notices...'))
-            notices = Notice.objects.filter(is_draft=False)
-            indexed_count = 0
-
-            for notice in notices:
-                doc = NoticeDocument(
-                    meta={'id': notice.id},
-                    title=notice.title,
-                    is_draft=notice.is_draft,
-                    id=notice.id,
-                )
-                doc.save()
-                indexed_count += 1
-
-            self.stdout.write(self.style.SUCCESS(f'Successfully indexed {indexed_count} notices'))
-
-        except Exception as e:
-            raise CommandError(f'Failed to rebuild search index: {e}')
+        return result

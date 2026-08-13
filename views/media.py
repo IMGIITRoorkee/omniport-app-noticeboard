@@ -36,7 +36,12 @@ class CopyMedia(APIView):
         try:
             user = request.user.username
             path = request.data['path'].strip('/')
-            source = os.path.normpath(os.path.join(settings.NETWORK_STORAGE_ROOT, path))
+            source = os.path.realpath(os.path.join(settings.NETWORK_STORAGE_ROOT, path))
+            root = os.path.join(os.path.realpath(settings.NETWORK_STORAGE_ROOT), '')
+            # Confine reads to the network storage root, else a path such as
+            # '../../etc/passwd' is copied into the public media directory
+            if not source.startswith(root):
+                return Response(status=status.HTTP_400_BAD_REQUEST)
             filename = path.split('/')[-1]
             file = os.path.splitext(filename)
             filename = user + '_' + hashlib.md5(str(file[0]).encode('utf-8')).hexdigest() + file[1]

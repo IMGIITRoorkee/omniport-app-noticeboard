@@ -14,6 +14,5 @@ def filter_search(data, queryset):
             search=data['keyword'])
     else:
         queryset = queryset.order_by('-datetime_modified')
-    # Drafts are unpublished, so they are excluded whether or not a keyword
-    # narrowed the result
+    # Drafts are unpublished, so exclude them on both branches
     return queryset.filter(is_draft=False)

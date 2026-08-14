@@ -36,10 +36,6 @@ class CopyMedia(APIView):
         try:
             user = request.user.username
             path = request.data['path'].strip('/')
-            # Resolve the requested path and ensure it stays within the network
-            # storage root. Without this check a crafted path containing '..'
-            # could escape the root and copy arbitrary files (e.g. secrets) into
-            # the publicly served media directory (path traversal, CWE-22).
             network_root = os.path.realpath(settings.NETWORK_STORAGE_ROOT)
             source = os.path.realpath(os.path.join(network_root, path))
             if os.path.commonpath([network_root, source]) != network_root:

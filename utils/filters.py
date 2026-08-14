@@ -11,7 +11,8 @@ def filter_search(data, queryset):
 
         # In search the queryset won't be ordered by datetime
         queryset = queryset.annotate(search=search_vector).filter(
-            search=data['keyword']).filter(is_draft=False)
+            search=data['keyword'])
     else:
         queryset = queryset.order_by('-datetime_modified')
-    return queryset
+    # Drafts are unpublished, so exclude them on both branches
+    return queryset.filter(is_draft=False)

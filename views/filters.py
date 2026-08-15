@@ -10,14 +10,14 @@ from rest_framework.permissions import (
 from categories.models import Category
 from noticeboard.models import (
     Banner,
-    Notice,
-    NoticeUser
+    Notice
 )
 from noticeboard.serializers import (
     MainCategorySerializer,
     NoticeListSerializer
 )
 from noticeboard.utils.filters import filter_search
+from noticeboard.utils.notices import get_notice_user
 
 
 class FilterListViewSet(viewsets.ReadOnlyModelViewSet):
@@ -216,14 +216,13 @@ class StarFilterViewSet(viewsets.ReadOnlyModelViewSet):
         person = self.request.person
         ip_address_rings = self.request.ip_address_rings
 
-        notice_user, created = NoticeUser.objects.get_or_create(person=person)
-        try:
-            queryset = notice_user.starred_notices
-            if ('internet' in ip_address_rings) and (len(ip_address_rings) <= 1):
-                queryset = queryset.filter(
-                    is_public=True
-                )
-            queryset = queryset.order_by('-datetime_modified')
-        except Exception:
-            queryset = Notice.objects.none()
-        return queryset
+        notice_user = get_notice_user(person)
+        if notice_user is None:
+            return Notice.objects.none()
+
+        queryset = notice_user.starred_notices
+        if ('internet' in ip_address_rings) and (len(ip_address_rings) <= 1):
+            queryset = queryset.filter(
+                is_public=True
+            )
+        return queryset.order_by('-datetime_modified')

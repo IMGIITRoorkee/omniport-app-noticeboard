@@ -5,10 +5,8 @@ from rest_framework import status
 
 from django.http import Http404
 
-from noticeboard.models import (
-    Notice,
-    NoticeUser,
-)
+from noticeboard.models import Notice
+from noticeboard.utils.notices import get_notice_user
 
 
 class StarReadNotices(APIView):
@@ -30,7 +28,10 @@ class StarReadNotices(APIView):
         keyword: str  (unread, read, starred, unstarred)
         """
 
-        notice_user, created = NoticeUser.objects.get_or_create(person=request.person)
+        notice_user = get_notice_user(request.person)
+        if notice_user is None:
+            return Response(status=status.HTTP_403_FORBIDDEN)
+
         data = request.data
 
         if 'notices' not in data.keys() or 'keyword' not in data.keys():

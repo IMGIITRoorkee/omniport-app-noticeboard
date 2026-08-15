@@ -7,7 +7,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticatedOrReadOnly
 
 from noticeboard.utils.notices import (
-    get_drafted_notices, has_super_upload_right
+    exclude_read_notices, get_drafted_notices, has_super_upload_right
 )
 from noticeboard.utils.get_recipients import get_recipients
 from noticeboard.utils.send_email import send_email
@@ -97,9 +97,7 @@ class NoticeViewSet(viewsets.ModelViewSet):
             """
             Send only unread notices
             """
-            queryset = queryset.exclude(
-                read_notice_set__person=self.request.person
-            )
+            queryset = exclude_read_notices(queryset, self.request.person)
 
         ip_address_rings = self.request.ip_address_rings
         if ('internet' in ip_address_rings) and (len(ip_address_rings) <= 1):

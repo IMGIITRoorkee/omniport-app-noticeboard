@@ -1,4 +1,37 @@
-from noticeboard.models import Permission, Notice
+from noticeboard.models import Permission, Notice, NoticeUser
+
+
+def get_notice_user(person):
+    """
+    Given a person, return the corresponding notice user, or None when there is
+    no person, as is the case for anonymous callers and for authenticated users
+    that have no person attached to them
+    :param person: the person on the request, possibly None
+    :return: the notice user, or None
+    """
+
+    if person is None:
+        return None
+
+    notice_user, created = NoticeUser.objects.get_or_create(person=person)
+    return notice_user
+
+
+def exclude_read_notices(queryset, person):
+    """
+    Drop the notices that the given person has read, leaving the queryset
+    untouched when there is no person, since such a caller has read nothing
+    :param queryset: the queryset of notices to narrow
+    :param person: the person on the request, possibly None
+    :return: the narrowed queryset
+    """
+
+    if person is None:
+        return queryset
+
+    return queryset.exclude(
+        read_notice_set__person=person
+    )
 
 
 def user_allowed_banners(person):

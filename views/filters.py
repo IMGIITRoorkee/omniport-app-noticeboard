@@ -15,6 +15,7 @@ from noticeboard.serializers import (
     NoticeListSerializer
 )
 from noticeboard.utils.filters import filter_search
+from noticeboard.utils.notices import scope_to_visible_notices
 
 
 class FilterListViewSet(viewsets.ReadOnlyModelViewSet):
@@ -80,9 +81,7 @@ class FilterViewSet(viewsets.ReadOnlyModelViewSet):
         else:
             raise Http404
 
-        ip_address_rings = self.request.ip_address_rings
-        if ('internet' in ip_address_rings) and (len(ip_address_rings) <= 1):
-            queryset = queryset.filter(is_public=True)
+        queryset = scope_to_visible_notices(queryset, self.request)
 
         queryset = filter_search(data, queryset)
         return queryset
@@ -132,9 +131,7 @@ class DateFilterViewSet(viewsets.ReadOnlyModelViewSet):
             end_date
         ))
 
-        ip_address_rings = self.request.ip_address_rings
-        if ('internet' in ip_address_rings) and (len(ip_address_rings) <= 1):
-            queryset = queryset.filter(is_public=True)
+        queryset = scope_to_visible_notices(queryset, self.request)
 
         # Filter corresponding to a banner or main category of banners
         banner_id = data.get('banner', None)
@@ -192,11 +189,7 @@ class InstituteNoticesDateFilterViewSet(viewsets.ReadOnlyModelViewSet):
                 end_date
             ))
 
-        ip_address_rings = self.request.ip_address_rings
-        if ('internet' in ip_address_rings) and (len(ip_address_rings) <= 1):
-            queryset = queryset.filter(
-                is_public=True
-            )
+        queryset = scope_to_visible_notices(queryset, self.request)
         
         return queryset
 

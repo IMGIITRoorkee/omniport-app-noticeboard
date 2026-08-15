@@ -7,7 +7,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticatedOrReadOnly
 
 from noticeboard.utils.notices import (
-    get_drafted_notices, has_super_upload_right
+    get_drafted_notices, has_super_upload_right, scope_to_visible_notices
 )
 from noticeboard.utils.get_recipients import get_recipients
 from noticeboard.utils.send_email import send_email
@@ -101,11 +101,7 @@ class NoticeViewSet(viewsets.ModelViewSet):
                 read_notice_set__person=self.request.person
             )
 
-        ip_address_rings = self.request.ip_address_rings
-        if ('internet' in ip_address_rings) and (len(ip_address_rings) <= 1):
-            queryset = queryset.filter(
-                is_public=True
-            )
+        queryset = scope_to_visible_notices(queryset, self.request)
 
         return queryset
 
@@ -245,11 +241,7 @@ class ExpiredNoticeViewSet(viewsets.ModelViewSet):
                 is_draft=False
             ).order_by('datetime_modified')
 
-        ip_address_rings = self.request.ip_address_rings
-        if ('internet' in ip_address_rings) and (len(ip_address_rings) <= 1):
-            queryset = queryset.filter(
-                is_public=True
-            )
+        queryset = scope_to_visible_notices(queryset, self.request)
 
         return queryset
 

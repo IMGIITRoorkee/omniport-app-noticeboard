@@ -4,7 +4,7 @@ from django.contrib.postgres.search import SearchVector, SearchQuery
 from rest_framework import viewsets
 from rest_framework import status
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticatedOrReadOnly
+from rest_framework.permissions import IsAuthenticated
 
 from noticeboard.utils.notices import (
     get_drafted_notices, has_super_upload_right, scope_to_visible_notices
@@ -31,7 +31,7 @@ class NoticeViewSet(viewsets.ModelViewSet):
     2. 'keyword': Search keyword
     """
 
-    permission_classes = [IsAuthenticatedOrReadOnly, IsUploader, isPublicInternet]
+    permission_classes = [IsAuthenticated, IsUploader, isPublicInternet]
     pagination_class = NoticesPageNumberPagination
     http_method_names = ['get', 'post', 'put', 'delete']
 
@@ -225,7 +225,7 @@ class ExpiredNoticeViewSet(viewsets.ModelViewSet):
     """
 
     lookup_field = 'notice_id'
-    permission_classes = [IsAuthenticatedOrReadOnly, IsUploader, isPublicInternet]
+    permission_classes = [IsAuthenticated, IsUploader, isPublicInternet]
     http_method_names = ['get', 'delete']
 
     def get_queryset(self):

@@ -2,7 +2,10 @@ import datetime
 
 from django.http import Http404
 from rest_framework import viewsets
-from rest_framework.permissions import IsAuthenticatedOrReadOnly
+from rest_framework.permissions import (
+    IsAuthenticated,
+    IsAuthenticatedOrReadOnly
+)
 
 from categories.models import Category
 from noticeboard.models import (
@@ -207,7 +210,7 @@ class StarFilterViewSet(viewsets.ReadOnlyModelViewSet):
     """
 
     serializer_class = NoticeListSerializer
-    permission_classes = [IsAuthenticatedOrReadOnly, ]
+    permission_classes = [IsAuthenticated, ]
 
     def get_queryset(self):
         person = self.request.person

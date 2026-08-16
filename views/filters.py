@@ -204,15 +204,11 @@ class StarFilterViewSet(viewsets.ReadOnlyModelViewSet):
 
     def get_queryset(self):
         person = self.request.person
-        ip_address_rings = self.request.ip_address_rings
 
         notice_user, created = NoticeUser.objects.get_or_create(person=person)
         try:
             queryset = notice_user.starred_notices
-            if ('internet' in ip_address_rings) and (len(ip_address_rings) <= 1):
-                queryset = queryset.filter(
-                    is_public=True
-                )
+            queryset = scope_to_visible_notices(queryset, self.request)
             queryset = queryset.order_by('-datetime_modified')
         except Exception:
             queryset = Notice.objects.none()

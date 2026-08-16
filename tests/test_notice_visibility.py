@@ -83,6 +83,15 @@ class Request:
         self.ip_address_rings = ip_address_rings
 
 
+class RequestWithoutRings:
+    """
+    Stands in for a caller that never passed the ring middleware
+    """
+
+    def __init__(self, person):
+        self.person = person
+
+
 class Notice:
     def __init__(self, is_public):
         self.is_public = is_public
@@ -222,6 +231,24 @@ class TestAuthenticatedCallersAreUnaffected(unittest.TestCase):
         self.assertFalse(
             may_read_notice(LOGGED_IN, RINGS['internet only'], is_public=False)
         )
+
+
+class TestCallersOutsideTheMiddleware(unittest.TestCase):
+    """
+    The ring middleware refuses a request whose ring list comes out empty, so
+    only a management command or an internal helper passing a request-like
+    object reaches a view without one. The open value is wrong for it.
+    """
+
+    def test_a_caller_carrying_no_rings_sees_public_notices_alone(self):
+        for label, request in (
+                ('an empty ring list', Request(LOGGED_IN, [])),
+                ('no ring attribute at all', RequestWithoutRings(LOGGED_IN))):
+            with self.subTest(caller=label):
+                self.assertTrue(
+                    scope_to_visible_notices(Queryset(), request).restricted,
+                    f'a caller with {label} was handed the unnarrowed queryset'
+                )
 
 
 class TestExactlyTheIntendedCellsChanged(unittest.TestCase):

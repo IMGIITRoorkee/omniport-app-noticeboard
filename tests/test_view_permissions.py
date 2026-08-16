@@ -33,6 +33,15 @@ EXPECTED_VIEWS = {
     },
 }
 
+# The modules whose `get_queryset` returns notices rather than categories or
+# permissions, and so has to narrow what the caller is allowed to read.
+NOTICE_MODULES = ('views/notices.py', 'views/filters.py')
+
+# The views that may relax their declared permissions at request time, and the
+# actions each may relax. Reading one notice is the only route left open to a
+# caller with no session, for the shared links /public/noticeboard serves.
+ANONYMOUS_READ_VIEWS = {'views/notices.py': {'NoticeViewSet': {'retrieve'}}}
+
 
 def declared_permissions(path):
     """
@@ -63,6 +72,52 @@ def declared_permissions(path):
     return declarations
 
 
+def methods(path, method_name):
+    """
+    Return {class name: the node of that method} for one module
+    """
+
+    tree = ast.parse(path.read_text())
+    found = {}
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ClassDef):
+            continue
+        for statement in node.body:
+            if not isinstance(statement, ast.FunctionDef):
+                continue
+            if statement.name != method_name:
+                continue
+            found[node.name] = statement
+
+    return found
+
+
+def names_used(node):
+    """
+    Every name the method refers to
+    """
+
+    return {
+        element.id for element in ast.walk(node)
+        if isinstance(element, ast.Name)
+    }
+
+
+def strings_used(node):
+    """
+    Every string literal in the method, its docstring aside
+    """
+
+    body = node.body[1:] if ast.get_docstring(node) else node.body
+
+    return {
+        element.value
+        for statement in body for element in ast.walk(statement)
+        if isinstance(element, ast.Constant) and isinstance(element.value, str)
+    }
+
+
 class TestNoticeViewsRequireAuthentication(unittest.TestCase):
     """
     A notice must not be readable without an account
@@ -89,14 +144,16 @@ class TestNoticeViewsRequireAuthentication(unittest.TestCase):
     def test_no_notice_view_admits_anonymous_readers(self):
         """
         This is F-7
+
+        Every view module is scanned, and every class in it, so that a view
+        added later cannot slip past a hardcoded list of the ones that exist
+        today. F-7 arose one omitted line at a time.
         """
 
-        for relative, expected in EXPECTED_VIEWS.items():
-            path = VIEWS.parent / relative
-            declared = declared_permissions(path)
-            for name in sorted(expected):
-                permissions = set(declared.get(name, []))
-                offending = permissions & FORBIDDEN
+        for path in sorted(VIEWS.glob('*.py')):
+            relative = f'views/{path.name}'
+            for name, permissions in sorted(declared_permissions(path).items()):
+                offending = set(permissions) & FORBIDDEN
                 self.assertFalse(
                     offending,
                     f'{relative}: {name} declares {sorted(offending)}, which '
@@ -119,6 +176,69 @@ class TestNoticeViewsRequireAuthentication(unittest.TestCase):
                     'IsAuthenticated', declared.get(name, []),
                     f'{relative}: {name} does not require authentication'
                 )
+
+    def test_only_the_public_notice_route_relaxes_its_permissions(self):
+        """
+        A `get_permissions` override is invisible to the scans above
+
+        It replaces `permission_classes` at request time, so a second one, or
+        a wider set of actions in the one there is, reopens anonymous read
+        without changing a declaration.
+        """
+
+        for path in sorted(VIEWS.glob('*.py')):
+            relative = f'views/{path.name}'
+            expected = ANONYMOUS_READ_VIEWS.get(relative, {})
+            overriding = methods(path, 'get_permissions')
+            self.assertEqual(
+                set(overriding), set(expected),
+                f'{relative}: {sorted(overriding)} override get_permissions, '
+                f'which decides permissions per request rather than by the '
+                f'declaration this suite reads'
+            )
+            for name, actions in sorted(expected.items()):
+                self.assertEqual(
+                    strings_used(overriding[name]), actions,
+                    f'{relative}: {name}.get_permissions relaxes its '
+                    f'permissions for actions other than {sorted(actions)}'
+                )
+
+
+class TestNoticeQuerysetsAreScoped(unittest.TestCase):
+    """
+    Authentication alone does not decide which notices a caller may read
+
+    `scope_to_visible_notices` is what keeps an internal notice away from a
+    person on the internet ring and from a session with no person, so every
+    notice queryset has to route through it.
+    """
+
+    def test_every_notice_queryset_is_scoped_to_the_caller(self):
+        for relative in NOTICE_MODULES:
+            path = VIEWS.parent / relative
+            querysets = methods(path, 'get_queryset')
+            self.assertTrue(
+                querysets, f'{relative}: no get_queryset left to check'
+            )
+            for name, node in sorted(querysets.items()):
+                self.assertIn(
+                    'scope_to_visible_notices', names_used(node),
+                    f'{relative}: {name}.get_queryset does not narrow its '
+                    f'notices to what the caller is allowed to read'
+                )
+
+    def test_notice_routes_keep_the_object_level_check(self):
+        """
+        The detail routes are reached by primary key, not through a list
+        """
+
+        declared = declared_permissions(VIEWS / 'notices.py')
+        for name in sorted(EXPECTED_VIEWS['views/notices.py']):
+            self.assertIn(
+                'isPublicInternet', declared.get(name, []),
+                f'views/notices.py: {name} no longer applies the object level '
+                f'check that refuses an internal notice fetched by id'
+            )
 
 
 if __name__ == '__main__':

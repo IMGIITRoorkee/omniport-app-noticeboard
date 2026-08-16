@@ -54,8 +54,9 @@ def scope_to_visible_notices(queryset, request):
 
     A notice is either public or internal. An internal notice is readable only
     by an authenticated person reaching the portal from inside the institute
-    network. Every other caller, which includes anyone who is not logged in,
-    sees the public notices alone.
+    network. Every other caller, which includes anyone who is not logged in and
+    anyone whose request carries no ring information, sees the public notices
+    alone.
 
     The check this replaces keyed on the IP address ring alone, so an
     anonymous caller on the institute network was indistinguishable from a
@@ -66,7 +67,9 @@ def scope_to_visible_notices(queryset, request):
     :return: the restricted queryset
     """
 
-    ip_address_rings = getattr(request, 'ip_address_rings', [])
+    # A request that never reached the ring middleware carries no rings; scope
+    # it as if it came from the internet rather than trusting it
+    ip_address_rings = getattr(request, 'ip_address_rings', None) or ['internet']
     is_request_from_internet = (
         'internet' in ip_address_rings and len(ip_address_rings) <= 1
     )

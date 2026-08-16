@@ -35,6 +35,17 @@ class NoticeViewSet(viewsets.ModelViewSet):
     pagination_class = NoticesPageNumberPagination
     http_method_names = ['get', 'post', 'put', 'delete']
 
+    def get_permissions(self):
+        """
+        Reading one notice is the only route left open to a caller with no
+        session, for the shared links /public/noticeboard serves
+        """
+
+        if self.action == 'retrieve':
+            return [IsUploader(), isPublicInternet()]
+
+        return super().get_permissions()
+
     def get_queryset(self):
 
         notice_class = self.request.query_params.get('class', None)

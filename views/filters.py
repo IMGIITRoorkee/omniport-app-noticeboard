@@ -2,7 +2,7 @@ import datetime
 
 from django.http import Http404
 from rest_framework import viewsets
-from rest_framework.permissions import IsAuthenticatedOrReadOnly
+from rest_framework.permissions import IsAuthenticated
 
 from categories.models import Category
 from noticeboard.models import (
@@ -15,6 +15,7 @@ from noticeboard.serializers import (
     NoticeListSerializer
 )
 from noticeboard.utils.filters import filter_search
+from noticeboard.utils.notices import scope_to_visible_notices
 
 
 class FilterListViewSet(viewsets.ReadOnlyModelViewSet):
@@ -29,7 +30,7 @@ class FilterListViewSet(viewsets.ReadOnlyModelViewSet):
     except Exception:
         queryset = Category.objects.none()
     pagination_class = None
-    permission_classes = [IsAuthenticatedOrReadOnly, ]
+    permission_classes = [IsAuthenticated, ]
 
 
 class FilterViewSet(viewsets.ReadOnlyModelViewSet):
@@ -42,7 +43,7 @@ class FilterViewSet(viewsets.ReadOnlyModelViewSet):
     """
 
     serializer_class = NoticeListSerializer
-    permission_classes = [IsAuthenticatedOrReadOnly, ]
+    permission_classes = [IsAuthenticated, ]
 
     @staticmethod
     def get_banner_object_from_id(pk):
@@ -80,9 +81,7 @@ class FilterViewSet(viewsets.ReadOnlyModelViewSet):
         else:
             raise Http404
 
-        ip_address_rings = self.request.ip_address_rings
-        if ('internet' in ip_address_rings) and (len(ip_address_rings) <= 1):
-            queryset = queryset.filter(is_public=True)
+        queryset = scope_to_visible_notices(queryset, self.request)
 
         queryset = filter_search(data, queryset)
         return queryset
@@ -101,7 +100,7 @@ class DateFilterViewSet(viewsets.ReadOnlyModelViewSet):
     """
 
     serializer_class = NoticeListSerializer
-    permission_classes = [IsAuthenticatedOrReadOnly, ]
+    permission_classes = [IsAuthenticated, ]
 
     @staticmethod
     def get_banner_object(pk):
@@ -132,9 +131,7 @@ class DateFilterViewSet(viewsets.ReadOnlyModelViewSet):
             end_date
         ))
 
-        ip_address_rings = self.request.ip_address_rings
-        if ('internet' in ip_address_rings) and (len(ip_address_rings) <= 1):
-            queryset = queryset.filter(is_public=True)
+        queryset = scope_to_visible_notices(queryset, self.request)
 
         # Filter corresponding to a banner or main category of banners
         banner_id = data.get('banner', None)
@@ -168,7 +165,7 @@ class InstituteNoticesDateFilterViewSet(viewsets.ReadOnlyModelViewSet):
     """
 
     serializer_class = NoticeListSerializer
-    permission_classes = [IsAuthenticatedOrReadOnly, ]
+    permission_classes = [IsAuthenticated, ]
 
     def get_queryset(self):
         data = self.request.query_params
@@ -192,11 +189,7 @@ class InstituteNoticesDateFilterViewSet(viewsets.ReadOnlyModelViewSet):
                 end_date
             ))
 
-        ip_address_rings = self.request.ip_address_rings
-        if ('internet' in ip_address_rings) and (len(ip_address_rings) <= 1):
-            queryset = queryset.filter(
-                is_public=True
-            )
+        queryset = scope_to_visible_notices(queryset, self.request)
         
         return queryset
 
@@ -207,19 +200,15 @@ class StarFilterViewSet(viewsets.ReadOnlyModelViewSet):
     """
 
     serializer_class = NoticeListSerializer
-    permission_classes = [IsAuthenticatedOrReadOnly, ]
+    permission_classes = [IsAuthenticated, ]
 
     def get_queryset(self):
         person = self.request.person
-        ip_address_rings = self.request.ip_address_rings
 
         notice_user, created = NoticeUser.objects.get_or_create(person=person)
         try:
             queryset = notice_user.starred_notices
-            if ('internet' in ip_address_rings) and (len(ip_address_rings) <= 1):
-                queryset = queryset.filter(
-                    is_public=True
-                )
+            queryset = scope_to_visible_notices(queryset, self.request)
             queryset = queryset.order_by('-datetime_modified')
         except Exception:
             queryset = Notice.objects.none()

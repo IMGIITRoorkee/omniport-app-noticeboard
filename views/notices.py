@@ -4,10 +4,10 @@ from django.contrib.postgres.search import SearchVector, SearchQuery
 from rest_framework import viewsets
 from rest_framework import status
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticatedOrReadOnly
+from rest_framework.permissions import IsAuthenticated
 
 from noticeboard.utils.notices import (
-    get_drafted_notices, has_super_upload_right
+    get_drafted_notices, has_super_upload_right, scope_to_visible_notices
 )
 from noticeboard.utils.get_recipients import get_recipients
 from noticeboard.utils.send_email import send_email
@@ -31,9 +31,20 @@ class NoticeViewSet(viewsets.ModelViewSet):
     2. 'keyword': Search keyword
     """
 
-    permission_classes = [IsAuthenticatedOrReadOnly, IsUploader, isPublicInternet]
+    permission_classes = [IsAuthenticated, IsUploader, isPublicInternet]
     pagination_class = NoticesPageNumberPagination
     http_method_names = ['get', 'post', 'put', 'delete']
+
+    def get_permissions(self):
+        """
+        Reading one notice is the only route left open to a caller with no
+        session, for the shared links /public/noticeboard serves
+        """
+
+        if self.action == 'retrieve':
+            return [IsUploader(), isPublicInternet()]
+
+        return super().get_permissions()
 
     def get_queryset(self):
 
@@ -101,11 +112,7 @@ class NoticeViewSet(viewsets.ModelViewSet):
                 read_notice_set__person=self.request.person
             )
 
-        ip_address_rings = self.request.ip_address_rings
-        if ('internet' in ip_address_rings) and (len(ip_address_rings) <= 1):
-            queryset = queryset.filter(
-                is_public=True
-            )
+        queryset = scope_to_visible_notices(queryset, self.request)
 
         return queryset
 
@@ -229,7 +236,7 @@ class ExpiredNoticeViewSet(viewsets.ModelViewSet):
     """
 
     lookup_field = 'notice_id'
-    permission_classes = [IsAuthenticatedOrReadOnly, IsUploader, isPublicInternet]
+    permission_classes = [IsAuthenticated, IsUploader, isPublicInternet]
     http_method_names = ['get', 'delete']
 
     def get_queryset(self):
@@ -245,11 +252,7 @@ class ExpiredNoticeViewSet(viewsets.ModelViewSet):
                 is_draft=False
             ).order_by('datetime_modified')
 
-        ip_address_rings = self.request.ip_address_rings
-        if ('internet' in ip_address_rings) and (len(ip_address_rings) <= 1):
-            queryset = queryset.filter(
-                is_public=True
-            )
+        queryset = scope_to_visible_notices(queryset, self.request)
 
         return queryset
 

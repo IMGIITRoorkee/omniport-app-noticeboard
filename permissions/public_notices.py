@@ -16,13 +16,11 @@ class isPublicInternet(BasePermission):
         if obj.is_public:
             return True
 
-        # An internal notice needs an authenticated person. The ring on its
-        # own used to be enough, which meant an anonymous caller on the
-        # institute network could read every notice without an account.
+        # An internal notice needs a person, not merely an institute address
         if getattr(request, 'person', None) is None:
             return False
 
-        # Check if the request only comes under the  internet IP address ring
+        # Check if the request only comes under the internet IP address ring
         is_request_from_internet = (
             'internet' in ip_address_rings and len(ip_address_rings) <= 1
         )

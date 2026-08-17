@@ -19,9 +19,7 @@ VIEWS = pathlib.Path(__file__).resolve().parent.parent / 'views'
 # read is what F-7 is about, so none of these views may declare it.
 FORBIDDEN = {'IsAuthenticatedOrReadOnly', 'AllowAny'}
 
-# Every view class in this package that serves notices or notice metadata.
-# Listed rather than discovered so that deleting a class cannot make the suite
-# pass by having nothing left to check.
+# Listed rather than discovered, so deleting a class cannot empty the suite
 EXPECTED_VIEWS = {
     'views/notices.py': {'NoticeViewSet', 'ExpiredNoticeViewSet'},
     'views/filters.py': {
@@ -37,12 +35,7 @@ EXPECTED_VIEWS = {
 # permissions, and so has to narrow what the caller is allowed to read.
 NOTICE_MODULES = ('views/notices.py', 'views/filters.py')
 
-# The views that may relax their declared permissions at request time, and the
-# actions each may relax. Reading one notice is the only route left open to a
-# caller with no session, for the shared links /public/noticeboard serves.
-# The one view that may decide permissions per action: the actions it may
-# relax, and the classes it must still return for them. Pinning the actions
-# alone leaves the returned list free to become AllowAny.
+# The views that may relax permissions per action, and what they must return
 ANONYMOUS_READ_VIEWS = {
     'views/notices.py': {
         'NoticeViewSet': {

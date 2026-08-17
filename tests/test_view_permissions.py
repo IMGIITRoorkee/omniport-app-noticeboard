@@ -40,7 +40,17 @@ NOTICE_MODULES = ('views/notices.py', 'views/filters.py')
 # The views that may relax their declared permissions at request time, and the
 # actions each may relax. Reading one notice is the only route left open to a
 # caller with no session, for the shared links /public/noticeboard serves.
-ANONYMOUS_READ_VIEWS = {'views/notices.py': {'NoticeViewSet': {'retrieve'}}}
+# The one view that may decide permissions per action: the actions it may
+# relax, and the classes it must still return for them. Pinning the actions
+# alone leaves the returned list free to become AllowAny.
+ANONYMOUS_READ_VIEWS = {
+    'views/notices.py': {
+        'NoticeViewSet': {
+            'actions': {'retrieve'},
+            'permissions': {'IsUploader', 'isPublicInternet'},
+        },
+    },
+}
 
 
 def declared_permissions(path):
@@ -116,6 +126,29 @@ def strings_used(node):
         for statement in body for element in ast.walk(statement)
         if isinstance(element, ast.Constant) and isinstance(element.value, str)
     }
+
+
+def permissions_returned(node):
+    """
+    The permission classes a `get_permissions` override returns explicitly
+
+    A bare `return super().get_permissions()` is the fall-through to the
+    declaration, which the other tests already cover, so it is skipped.
+    """
+
+    returned = set()
+
+    for statement in ast.walk(node):
+        if not isinstance(statement, ast.Return) or statement.value is None:
+            continue
+        if isinstance(statement.value, ast.Call):
+            continue
+        returned |= {
+            element.id for element in ast.walk(statement.value)
+            if isinstance(element, ast.Name)
+        }
+
+    return returned
 
 
 class TestNoticeViewsRequireAuthentication(unittest.TestCase):
@@ -196,11 +229,19 @@ class TestNoticeViewsRequireAuthentication(unittest.TestCase):
                 f'which decides permissions per request rather than by the '
                 f'declaration this suite reads'
             )
-            for name, actions in sorted(expected.items()):
+            for name, rule in sorted(expected.items()):
                 self.assertEqual(
-                    strings_used(overriding[name]), actions,
+                    strings_used(overriding[name]), rule['actions'],
                     f'{relative}: {name}.get_permissions relaxes its '
-                    f'permissions for actions other than {sorted(actions)}'
+                    f'permissions for actions other than '
+                    f'{sorted(rule["actions"])}'
+                )
+                self.assertEqual(
+                    permissions_returned(overriding[name]), rule['permissions'],
+                    f'{relative}: {name}.get_permissions no longer returns '
+                    f'{sorted(rule["permissions"])} for '
+                    f'{sorted(rule["actions"])}. Pinning the action alone lets '
+                    f'the one deliberately open route become AllowAny.'
                 )
 
 

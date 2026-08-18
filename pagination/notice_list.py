@@ -1,6 +1,8 @@
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 
+from noticeboard.utils.notices import exclude_read_notices
+
 
 class NoticesPageNumberPagination(PageNumberPagination):
     """
@@ -12,10 +14,11 @@ class NoticesPageNumberPagination(PageNumberPagination):
         Override PageNumberPagination.paginate_queryset to include count of
         unread important notices.
         """
-        self.important_unread_count = queryset.filter(
-            is_important=True,
-        ).exclude(
-                read_notice_set__person=request.person
+        self.important_unread_count = exclude_read_notices(
+            queryset.filter(
+                is_important=True,
+            ),
+            request.person,
         ).count()
         return super().paginate_queryset(queryset, request, view)
 

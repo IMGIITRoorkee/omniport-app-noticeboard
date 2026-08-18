@@ -1,7 +1,7 @@
 import logging
-import os
 
 from django.contrib.postgres.search import SearchVector
+from django.db.models import Case, When
 from rest_framework import viewsets
 from rest_framework import status
 from rest_framework.response import Response
@@ -18,17 +18,12 @@ from noticeboard.models import *
 from categories.models import Category
 from noticeboard.permissions import IsUploader, isPublicInternet
 from noticeboard.pagination import NoticesPageNumberPagination
+from noticeboard.utils.search import (
+    ElasticsearchUnavailable, get_ranked_notice_ids
+)
 
 logger = logging.getLogger('noticeboard')
 
-MAX_SEARCH_RESULTS = int(os.getenv('NOTICEBOARD_MAX_SEARCH_RESULTS', '1000'))
-ELASTICSEARCH_REQUEST_TIMEOUT = 3
-ELASTICSEARCH_RECENCY_DECAY_ORIGIN = os.getenv('NOTICEBOARD_ES_RECENCY_ORIGIN', 'now')
-ELASTICSEARCH_RECENCY_DECAY_SCALE = os.getenv('NOTICEBOARD_ES_RECENCY_SCALE', '60d')
-ELASTICSEARCH_RECENCY_DECAY_OFFSET = os.getenv('NOTICEBOARD_ES_RECENCY_OFFSET', '3d')
-ELASTICSEARCH_RECENCY_DECAY_FACTOR = float(
-    os.getenv('NOTICEBOARD_ES_RECENCY_DECAY', '0.20')
-)
 
 class NoticeViewSet(viewsets.ModelViewSet):
     """
@@ -72,219 +67,38 @@ class NoticeViewSet(viewsets.ModelViewSet):
                 ).exclude(banner=banner_object).order_by('-datetime_modified')
 
             elif keyword:
-                from elasticsearch_dsl import Q as ES_Q
-                from elasticsearch_dsl.connections import connections
-                from elastic_transport import (
-                    ApiError as ElasticTransportApiError,
-                    ConnectionError as ElasticTransportConnectionError,
-                    ConnectionTimeout,
-                )
-                from django.db.models import Case, When
-
                 normalized_sort_mode = (sort_mode or 'date').strip().lower()
                 sort_by_relevance = normalized_sort_mode == 'relevance'
 
-                # Reuse the connection configured by ELASTICSEARCH_DSL in
-                # omniport.settings.third_party.elastic. This honors host,
-                # auth, TLS, and timeout settings driven by the environment
-                # (see noticeboard/elasticsearch.env in omniport-docker), and
-                # avoids spinning up a fresh connection pool per request.
-                es = connections.get_connection()
-
-                normalized_keyword = keyword.replace('_', ' ')
-                keyword_lower = normalized_keyword.lower()
-
-                draft_filter = ES_Q('term', is_draft=False)
-
-                def _wrap_with_recency_decay(query_dict):
-                    return {
-                        'function_score': {
-                            'query': query_dict,
-                            'functions': [
-                                {
-                                    'gauss': {
-                                        'datetime_modified': {
-                                            'origin': ELASTICSEARCH_RECENCY_DECAY_ORIGIN,
-                                            'scale': ELASTICSEARCH_RECENCY_DECAY_SCALE,
-                                            'decay': ELASTICSEARCH_RECENCY_DECAY_FACTOR,
-                                            'offset': ELASTICSEARCH_RECENCY_DECAY_OFFSET,
-                                        }
-                                    }
-                                }
-                            ],
-                            'score_mode': 'multiply',
-                            'boost_mode': 'multiply',
-                        }
-                    }
-
                 try:
-                    exact_should = [
-                        ES_Q(
-                            'multi_match',
-                            query=normalized_keyword,
-                            type='phrase',
-                            fields=['title^5', 'content'],
-                        ),
-                        ES_Q(
-                            'wildcard',
-                            title={
-                                'value': f'*{keyword_lower}*',
-                                'boost': 2,
-                            },
-                        ),
-                    ]
-
-                    exact_query = ES_Q(
-                        'bool',
-                        must=[draft_filter],
-                        should=exact_should,
-                        minimum_should_match=1,
+                    notice_id_list = get_ranked_notice_ids(
+                        keyword,
+                        sort_by_relevance=sort_by_relevance,
                     )
-
-                    logger.debug("Elasticsearch notice phase 1 (strict) query: %s", exact_query.to_dict())
-                    search_results = es.search(
-                        index='notice',
-                        body={
-                            'query': _wrap_with_recency_decay(exact_query.to_dict()),
-                            'size': MAX_SEARCH_RESULTS,
-                        },
-                        request_timeout=ELASTICSEARCH_REQUEST_TIMEOUT,
-                    )
-
-                    total_hits = search_results.get('hits', {}).get('total', 0)
-                    if isinstance(total_hits, dict):
-                        total_hits = total_hits.get('value', 0)
-                    if total_hits > MAX_SEARCH_RESULTS:
-                        logger.warning(
-                            'Notice search returned %s hits; truncating to first %s. '
-                            'Increase NOTICEBOARD_MAX_SEARCH_RESULTS or paginate at ES layer.',
-                            total_hits,
-                            MAX_SEARCH_RESULTS,
-                        )
-
-                    notice_id_list = [
-                        hit['_source']['id']
-                        for hit in search_results.get('hits', {}).get('hits', [])
-                    ]
-
-                    if not notice_id_list:
-                        relaxed_query = ES_Q(
-                            'multi_match',
-                            query=normalized_keyword,
-                            fields=['title^5', 'content'],
-                            type='best_fields',
-                            minimum_should_match='2<75%',
-                        )
-
-                        base_query = ES_Q(
-                            'bool',
-                            must=[draft_filter, relaxed_query],
-                        )
-
-                        logger.debug("Elasticsearch notice phase 2 (relaxed) query: %s", base_query.to_dict())
-                        search_results = es.search(
-                            index='notice',
-                            body={
-                                'query': _wrap_with_recency_decay(base_query.to_dict()),
-                                'size': MAX_SEARCH_RESULTS,
-                            },
-                            request_timeout=ELASTICSEARCH_REQUEST_TIMEOUT,
-                        )
-
-                        total_hits = search_results.get('hits', {}).get('total', 0)
-                        if isinstance(total_hits, dict):
-                            total_hits = total_hits.get('value', 0)
-                        if total_hits > MAX_SEARCH_RESULTS:
-                            logger.warning(
-                                'Notice search returned %s hits; truncating to first %s. '
-                                'Increase NOTICEBOARD_MAX_SEARCH_RESULTS or paginate at ES layer.',
-                                total_hits,
-                                MAX_SEARCH_RESULTS,
-                            )
-
-                        notice_id_list = [
-                            hit['_source']['id']
-                            for hit in search_results.get('hits', {}).get('hits', [])
-                        ]
-
-                    if not notice_id_list:
-                        fuzzy_query = ES_Q(
-                            'multi_match',
-                            query=normalized_keyword,
-                            fields=['title^5', 'content'],
-                            fuzziness='AUTO',
-                            prefix_length=1,
-                            max_expansions=50,
-                        )
-
-                        base_query = ES_Q(
-                            'bool',
-                            must=[draft_filter, fuzzy_query],
-                        )
-
-                        logger.debug("Elasticsearch notice phase 3 (fuzzy) query: %s", base_query.to_dict())
-                        search_results = es.search(
-                            index='notice',
-                            body={
-                                'query': _wrap_with_recency_decay(base_query.to_dict()),
-                                'size': MAX_SEARCH_RESULTS,
-                            },
-                            request_timeout=ELASTICSEARCH_REQUEST_TIMEOUT,
-                        )
-
-                        total_hits = search_results.get('hits', {}).get('total', 0)
-                        if isinstance(total_hits, dict):
-                            total_hits = total_hits.get('value', 0)
-                        if total_hits > MAX_SEARCH_RESULTS:
-                            logger.warning(
-                                'Notice search returned %s hits; truncating to first %s. '
-                                'Increase NOTICEBOARD_MAX_SEARCH_RESULTS or paginate at ES layer.',
-                                total_hits,
-                                MAX_SEARCH_RESULTS,
-                            )
-
-                        notice_id_list = [
-                            hit['_source']['id']
-                            for hit in search_results.get('hits', {}).get('hits', [])
-                        ]
-
-                    if notice_id_list:
-                        queryset = Notice.objects.filter(id__in=notice_id_list)
-
-                        if sort_by_relevance:
-                            order_cases = [
-                                When(id=pk, then=pos)
-                                for pos, pk in enumerate(notice_id_list)
-                            ]
-                            order_by_case = Case(*order_cases)
-                            queryset = queryset.order_by(order_by_case)
-                        else:
-                            queryset = queryset.order_by('-datetime_modified')
-                    else:
-                        queryset = Notice.objects.none()
-
-                except (
-                    ElasticTransportApiError,
-                    ElasticTransportConnectionError,
-                    ConnectionTimeout,
-                ) as exc:
+                except ElasticsearchUnavailable as exc:
                     logger.warning(
-                        'Elasticsearch unavailable for notice search or index missing, falling back to '
-                        'PostgreSQL full-text search: %s',
+                        'Elasticsearch unavailable for notice search, falling '
+                        'back to PostgreSQL full-text search: %s',
                         exc,
                         exc_info=True,
                     )
-                    search_vector = SearchVector('title', 'content')
                     queryset = Notice.objects.annotate(
-                        search=search_vector,
+                        search=SearchVector('title', 'content'),
                     ).filter(
-                        search=normalized_keyword,
+                        search=keyword.replace('_', ' '),
                     ).filter(
                         is_draft=False,
                     ).order_by('-datetime_modified')
-                except Exception as exc:
-                    logger.error("Elasticsearch notice search failed: %s", exc, exc_info=True)
-                    queryset = Notice.objects.none()
+                else:
+                    queryset = Notice.objects.filter(id__in=notice_id_list)
+
+                    if notice_id_list and sort_by_relevance:
+                        queryset = queryset.order_by(Case(*[
+                            When(id=pk, then=pos)
+                            for pos, pk in enumerate(notice_id_list)
+                        ]))
+                    else:
+                        queryset = queryset.order_by('-datetime_modified')
 
             else:
                 queryset = Notice.objects.filter(

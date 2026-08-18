@@ -3,8 +3,9 @@ from omniport.utils import switcher
 from formula_one.serializers.base import ModelSerializer
 from categories.models import UserSubscription
 
-from noticeboard.models import Notice, ExpiredNotice, NoticeUser, Banner
+from noticeboard.models import Notice, ExpiredNotice, Banner
 from noticeboard.serializers import BannerSerializer
+from noticeboard.utils.notices import get_notice_user
 
 AvatarSerializer = switcher.load_serializer('kernel', 'Person', 'Avatar')
 
@@ -42,26 +43,20 @@ class NoticeDetailSerializer(ModelSerializer):
                   'banner', 'read', 'starred', 'uploader', 'expiry_date')
 
     def is_read(self, obj):
-        person = self.context['request'].person
+        notice_user = get_notice_user(self.context['request'].person)
 
-        if person:
-            notice_user, created = NoticeUser.objects.get_or_create(person=person)
-            read_notices = notice_user.read_notices.all()
+        if notice_user is None:
+            return False
 
-            return read_notices.filter(id=obj.id).exists()
-
-        return False
+        return notice_user.read_notices.filter(id=obj.id).exists()
 
     def is_starred(self, obj):
-        person = self.context['request'].person
+        notice_user = get_notice_user(self.context['request'].person)
 
-        if person:
-            notice_user, created = NoticeUser.objects.get_or_create(person=person)
-            starred_notices = notice_user.starred_notices.all()
+        if notice_user is None:
+            return False
 
-            return starred_notices.filter(id=obj.id).exists()
-        
-        return False
+        return notice_user.starred_notices.filter(id=obj.id).exists()
 
 
 class NoticeListSerializer(NoticeDetailSerializer):

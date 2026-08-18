@@ -53,4 +53,6 @@ class IsUploader(BasePermission):
         if request.method == 'GET':
             return True
 
-        return obj.uploader.id == request.person.id
+        person = request.person
+
+        return person is not None and obj.uploader.id == person.id

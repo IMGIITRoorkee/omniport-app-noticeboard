@@ -1,0 +1,29 @@
+name: tests
+
+on:
+  push:
+    branches: [master, elasticsearch]
+  pull_request:
+
+jobs:
+  python:
+    name: Search ranking tests
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    # The ranking tests build real query DSL rather than asserting against a
+    # stub, so the library is installed. It is pure Python and needs no
+    # cluster. Pinned to the version the deployment runs.
+    - name: Install the query builder
+      run: pip install elasticsearch-dsl==8.15.4
+
+    - name: Run the test suite
+      run: python -m unittest discover --start-directory tests --verbose
+
+    - name: Byte-compile the package
+      run: python -m compileall -q utils views serializers

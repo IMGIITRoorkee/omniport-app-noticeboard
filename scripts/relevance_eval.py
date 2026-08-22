@@ -41,6 +41,7 @@ Three cases are known to sit below the rest, for reasons that are not defects:
 
 import re
 import sys
+from collections import Counter
 
 import django
 
@@ -48,9 +49,14 @@ django.setup()
 
 from noticeboard.documents import strip_html_tags
 from noticeboard.models import Notice
-from noticeboard.utils.search import get_ranked_notice_ids
+from noticeboard.utils.search import get_ranked_notices
 
 TOP_N = 30
+
+# Shorthand for the tier a result matched at, printed as a histogram of the top
+# N so a reviewer can see where the group boundaries fell rather than only the
+# precision. T is the title, C the content, ~ a fragment inside a word.
+TIER_SYMBOLS = {1: 'T=', 2: 'T~', 3: 'C=', 4: 'T*', 5: 'rx', 6: 'fz'}
 
 BOILERPLATE = [
     'google form', 'google forms', 'google meet', 'google drive',
@@ -142,20 +148,37 @@ def grade(tokens, title, body):
     return 0
 
 
-def evaluate(query, judge_as=None):
-    notice_id_list = get_ranked_notice_ids(query, sort_by_relevance=True)
-    top = notice_id_list[:TOP_N]
+def tier_histogram(tiers):
+    """
+    Summarise which tiers the top N came from, strongest first
+    """
 
-    notices = {notice.id: notice for notice in Notice.objects.filter(id__in=top)}
-    ordered = [notices[pk] for pk in top if pk in notices]
+    counts = Counter(tiers)
+    return ' '.join(
+        '%s%d' % (TIER_SYMBOLS.get(tier, '??'), counts[tier])
+        for tier in sorted(counts)
+    )
+
+
+def evaluate(query, judge_as=None):
+    ranked = get_ranked_notices(query, sort_by_relevance=True)
+    top = ranked[:TOP_N]
+    tier_of = dict(top)
+
+    notices = {
+        notice.id: notice
+        for notice in Notice.objects.filter(id__in=[pk for pk, _ in top])
+    }
+    ordered = [notices[pk] for pk, _ in top if pk in notices]
 
     tokens = significant_tokens(judge_as or query)
     grades = [
         grade(tokens, notice.title, strip_html_tags(notice.content or ''))
         for notice in ordered
     ]
+    tiers = [tier_of[notice.id] for notice in ordered]
 
-    return notice_id_list, ordered, grades
+    return ranked, ordered, grades, tiers
 
 
 def main():
@@ -166,14 +189,14 @@ def main():
 
     print('%-26s %-9s %6s   %s' % (
         'query', 'category', 'hits',
-        'top%d: strong / partial / junk    P@%d  floor' % (TOP_N, TOP_N)))
-    print('-' * 100)
+        'top%d: str/par/junk   P@%d  floor  tiers' % (TOP_N, TOP_N)))
+    print('-' * 110)
 
     results = []
     below_floor = []
 
     for query, category, judge_as, floor in CASES:
-        notice_id_list, ordered, grades = evaluate(query, judge_as)
+        notice_id_list, ordered, grades, tiers = evaluate(query, judge_as)
 
         strong = grades.count(2)
         partial = grades.count(1)
@@ -184,9 +207,10 @@ def main():
         if failed:
             below_floor.append((query, precision, floor))
 
-        print('%-26s %-9s %6d   %2d / %2d / %2d           %3.0f%%  %3.0f%% %s' % (
+        print('%-26s %-9s %6d   %2d /%2d /%2d   %3.0f%%  %3.0f%%  %-20s %s' % (
             query, category, len(notice_id_list), strong, partial, junk,
-            100 * precision, 100 * floor, 'BELOW FLOOR' if failed else ''))
+            100 * precision, 100 * floor, tier_histogram(tiers),
+            'BELOW FLOOR' if failed else ''))
         results.append((query, precision, junk, ordered, grades))
 
     print()

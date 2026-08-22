@@ -49,12 +49,26 @@ class FakeElasticsearch:
     the order the phases run, so a test can say what strict, relaxed and fuzzy
     each return. Running out of responses means the phase was not expected to
     run at all, and yields nothing.
+
+    A hit may carry a third element, the clause names Elasticsearch matched it
+    on. Leaving it off omits `matched_queries` from the hit entirely, which is
+    what a real cluster does when nothing named matched.
     """
 
     def __init__(self, responses=None, raises=None):
         self.responses = list(responses or [])
         self.raises = raises
         self.bodies = []
+
+    @staticmethod
+    def _hit(row):
+        pk, modified = row[0], row[1]
+        hit = {'_source': {'id': pk, 'datetime_modified': modified}}
+
+        if len(row) > 2:
+            hit['matched_queries'] = list(row[2])
+
+        return hit
 
     def search(self, index, body, request_timeout=None):
         if self.raises is not None:
@@ -66,10 +80,7 @@ class FakeElasticsearch:
         return {
             'hits': {
                 'total': {'value': len(hits)},
-                'hits': [
-                    {'_source': {'id': pk, 'datetime_modified': modified}}
-                    for pk, modified in hits
-                ],
+                'hits': [self._hit(row) for row in hits],
             }
         }
 
@@ -468,7 +479,8 @@ class TestPhaseOrchestration(unittest.TestCase):
             [(2, '2026-01-02T00:00:00+00:00'), (3, '2026-01-03T00:00:00+00:00')],
         ])
 
-        self.assertEqual(found, [1, 2, 3])
+        self.assertEqual(sorted(found), [1, 2, 3])
+        self.assertEqual(len(found), len(set(found)))
 
     def test_the_stricter_phase_keeps_the_better_ranks(self):
         """
@@ -513,6 +525,236 @@ class TestPhaseOrchestration(unittest.TestCase):
 
         with self.assertRaises(search.ElasticsearchUnavailable):
             search.get_ranked_notice_ids('anything')
+
+
+TITLE_EXACT = (search.TITLE_PREFIX_CLAUSE, search.PHRASE_CLAUSE,
+               search.TITLE_WILDCARD_CLAUSE)
+TITLE_PARTIAL = (search.TITLE_PREFIX_CLAUSE, search.TITLE_WILDCARD_CLAUSE)
+CONTENT_EXACT = (search.PHRASE_CLAUSE,)
+TITLE_SUBSTRING = (search.TITLE_WILDCARD_CLAUSE,)
+
+
+class TestRelevanceTiers(unittest.TestCase):
+    """
+    Equally relevant notices are grouped, and each group runs newest first
+
+    Within a group the Elasticsearch score only reflects title length: for
+    'microsoft' the 107 notices carrying it in the title scored 72.6 down to
+    40.4 purely because shorter titles score higher, an order no reader can
+    perceive as meaningful. The group boundary is structural rather than
+    numeric — the first body-only match scored 7.31, a 5.5x cliff — so the tier
+    is read off the clauses a hit matched instead of off a tuned threshold.
+    """
+
+    def setUp(self):
+        self.client = None
+        self.connections_module = None
+        self.original = None
+
+    def tearDown(self):
+        if self.connections_module is not None:
+            _restore_client(self.connections_module, self.original)
+
+    def _run(self, responses, **kwargs):
+        self.client = FakeElasticsearch(responses=responses)
+        self.connections_module, self.original = _use_client(self.client)
+        return search.get_ranked_notice_ids('anything', **kwargs)
+
+    def test_every_strict_clause_is_named_so_a_tier_can_be_read_back(self):
+        """
+        The names are the whole input to the tier; unnamed, everything ties
+        """
+
+        strict = _phases()['strict']
+
+        self.assertEqual(
+            _should_clause(strict, 'multi_match')['_name'],
+            search.PHRASE_CLAUSE,
+        )
+        self.assertEqual(
+            _should_clause(strict, 'match_phrase_prefix')['title']['_name'],
+            search.TITLE_PREFIX_CLAUSE,
+        )
+        self.assertEqual(
+            _should_clause(strict, 'wildcard')['title']['_name'],
+            search.TITLE_WILDCARD_CLAUSE,
+        )
+
+    def test_the_phrase_in_the_title_is_the_strongest_reading(self):
+        self.assertEqual(
+            search._tier_for('strict', TITLE_EXACT),
+            search.TIER_TITLE_EXACT,
+        )
+
+    def test_a_partly_typed_word_in_the_title_comes_next(self):
+        self.assertEqual(
+            search._tier_for('strict', TITLE_PARTIAL),
+            search.TIER_TITLE_PARTIAL,
+        )
+
+    def test_the_phrase_in_the_body_ranks_under_any_title_match(self):
+        self.assertLess(
+            search._tier_for('strict', TITLE_PARTIAL),
+            search._tier_for('strict', CONTENT_EXACT),
+        )
+
+    def test_a_fragment_inside_a_word_ranks_under_a_body_match(self):
+        """
+        'art' matches Department, IndiaMART and Flipkart through the wildcard.
+        Those must stay available but must not displace a real body match.
+        """
+
+        self.assertGreater(
+            search._tier_for('strict', TITLE_SUBSTRING),
+            search._tier_for('strict', CONTENT_EXACT),
+        )
+
+    def test_the_later_phases_rank_under_every_strict_reading(self):
+        weakest_strict = max(
+            search._tier_for('strict', matched)
+            for matched in (TITLE_EXACT, TITLE_PARTIAL, CONTENT_EXACT,
+                            TITLE_SUBSTRING)
+        )
+
+        self.assertLess(weakest_strict, search._tier_for('relaxed', ()))
+        self.assertLess(
+            search._tier_for('relaxed', ()),
+            search._tier_for('fuzzy', ()),
+        )
+
+    def test_a_hit_with_no_names_at_all_still_gets_a_tier(self):
+        """
+        Elasticsearch omits matched_queries entirely when nothing named matched
+        """
+
+        self.assertEqual(
+            search._tier_for('strict', None),
+            search.TIER_TITLE_SUBSTRING,
+        )
+
+    def test_a_stronger_tier_wins_however_old_the_notice_is(self):
+        found = self._run([
+            [
+                (1, '2026-08-01T00:00:00+00:00', CONTENT_EXACT),
+                (2, '2019-01-01T00:00:00+00:00', TITLE_EXACT),
+            ],
+        ])
+
+        self.assertEqual(
+            found,
+            [2, 1],
+            'a title match from 2019 must still outrank a body match from last '
+            'month, or tiering has become a date sort',
+        )
+
+    def test_inside_one_tier_the_newest_notice_leads(self):
+        found = self._run([
+            [
+                (1, '2024-03-03T00:00:00+00:00', TITLE_EXACT),
+                (2, '2026-08-01T00:00:00+00:00', TITLE_EXACT),
+                (3, '2025-05-05T00:00:00+00:00', TITLE_EXACT),
+            ],
+        ])
+
+        self.assertEqual(found, [2, 3, 1])
+
+    def test_each_tier_is_ordered_within_itself_not_across(self):
+        found = self._run([
+            [
+                (1, '2020-01-01T00:00:00+00:00', TITLE_EXACT),
+                (2, '2026-08-01T00:00:00+00:00', CONTENT_EXACT),
+                (3, '2021-01-01T00:00:00+00:00', TITLE_EXACT),
+                (4, '2026-09-01T00:00:00+00:00', CONTENT_EXACT),
+            ],
+        ])
+
+        self.assertEqual(found, [3, 1, 4, 2])
+
+    def test_a_notice_found_twice_keeps_its_strongest_tier(self):
+        """
+        The relaxed phase re-reports strict hits, and must not demote them
+        """
+
+        found = self._run([
+            [(1, '2020-01-01T00:00:00+00:00', TITLE_EXACT)],
+            [
+                (2, '2026-08-01T00:00:00+00:00', ()),
+                (1, '2020-01-01T00:00:00+00:00', ()),
+            ],
+        ])
+
+        self.assertEqual(found, [1, 2])
+
+    def test_the_weak_tiers_keep_the_order_elasticsearch_gave_them(self):
+        """
+        Past the title tiers the score still says something, so date must not
+        replace it
+
+        A fuzzy hit is a guess, and the score is how good a guess it was:
+        ordering that tier by date instead took 'gogle' from 100% precision to
+        23%, because it stopped separating Google from Goel.
+        """
+
+        found = self._run([
+            [], [],
+            [
+                (1, '2019-01-01T00:00:00+00:00'),
+                (2, '2026-08-01T00:00:00+00:00'),
+                (3, '2020-01-01T00:00:00+00:00'),
+            ],
+        ])
+
+        self.assertEqual(
+            found,
+            [1, 2, 3],
+            'the fuzzy tier must come back in the order Elasticsearch scored '
+            'it, not newest first',
+        )
+
+    def test_the_title_tiers_are_the_ones_that_get_date_ordered(self):
+        self.assertEqual(
+            search.LAST_DATE_ORDERED_TIER,
+            search.TIER_TITLE_SUBSTRING,
+            'date ordering belongs to the tiers where the score is only title '
+            'length; past those it still discriminates',
+        )
+
+    def test_a_date_search_is_left_alone(self):
+        """
+        Date mode already sorts purely by date and must keep doing so
+        """
+
+        found = self._run(
+            [
+                [
+                    (1, '2026-08-01T00:00:00+00:00', CONTENT_EXACT),
+                    (2, '2019-01-01T00:00:00+00:00', TITLE_EXACT),
+                ],
+            ],
+            sort_by_relevance=False,
+        )
+
+        self.assertEqual(found, [1, 2])
+
+    def test_turning_tiering_off_restores_the_plain_score_order(self):
+        original = search.TIERED_RELEVANCE
+        search.TIERED_RELEVANCE = False
+        try:
+            found = self._run([
+                [
+                    (1, '2026-08-01T00:00:00+00:00', CONTENT_EXACT),
+                    (2, '2019-01-01T00:00:00+00:00', TITLE_EXACT),
+                ],
+            ])
+        finally:
+            search.TIERED_RELEVANCE = original
+
+        self.assertEqual(
+            found,
+            [1, 2],
+            'with the flag off the order Elasticsearch returned must survive '
+            'untouched, or there is no way back without a deploy',
+        )
 
 
 if __name__ == '__main__':

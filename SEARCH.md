@@ -48,6 +48,44 @@ The strict phase has three clauses, any one of which is enough to match:
 
 Every phase filters `is_draft: false`. Unpublished notices are never searchable.
 
+Each strict clause is named, and Elasticsearch reports the names a hit matched
+back in `matched_queries`. That is what a tier is read from, below.
+
+## Relevance tiers
+
+Score alone is a poor final order. For `microsoft` the 107 notices carrying it
+in the title score from 72.6 down to 40.4, and the whole spread is BM25's
+field-length normalisation: "Microsoft: Design Challenge" beats "Microsoft
+(Applied Scientist): Shortlist for Interviews" for having fewer words. To a
+reader those are equally relevant and the order is noise.
+
+The boundary between groups, on the other hand, is sharp. The first body-only
+match for `microsoft` scores 7.31 — a 5.5× cliff, not a gradient — and it lines
+up with *how* the notice matched rather than with any number. So the group is
+read off `matched_queries` and no threshold has to be tuned:
+
+| Tier | Matched | Meaning |
+|---|---|---|
+| 1 | `title_prefix` + `phrase` | the phrase is in the title |
+| 2 | `title_prefix` | a partly typed word at the start of a title word |
+| 3 | `phrase` | the exact phrase is in the body |
+| 4 | `title_wildcard` only | a fragment inside a title word |
+| 5 | the relaxed phase | 75% of the words, anywhere |
+| 6 | the fuzzy phase | within one or two edits |
+
+Results are ordered by tier, then **by date inside tiers 1 to 4** and **by score
+inside tiers 5 and 6**. That split is not a matter of taste; it was measured.
+Date-ordering the fuzzy tier as well took `gogle` from 100% precision to 23%,
+because inside that tier the score is what separates Google from Goel. Inside
+the title tiers it separates nothing but title length.
+
+Tier 4 sits under tier 3 deliberately. A wildcard hit is a fragment inside a
+word — `art` matches "Dep**art**ment", "India**MART**", "Flipk**art**" — so it
+stays available, since it is what makes `goog` and `amaz` work, without
+displacing a genuine body match.
+
+Set `NOTICEBOARD_TIERED_RELEVANCE=0` to fall back to ordering by score alone.
+
 ## Ranking
 
 Scores are Elasticsearch's own BM25, multiplied by a recency factor from
@@ -78,8 +116,15 @@ a code change.
 | `RECENCY_DECAY_OFFSET` | `30d` | grace period before any decay |
 | `RECENCY_DECAY_FACTOR` | `0.5` | curve value one scale past the offset |
 | `MIN_SEARCH_RESULTS` | `5` | below this, escalate to the next phase |
-| `MAX_SEARCH_RESULTS` | `1000` | cap on ids returned to the notice list |
+| `MAX_SEARCH_RESULTS` | `2000` | cap on ids returned to the notice list |
 | `MAX_FILTERED_SEARCH_RESULTS` | `10000` | cap for the filter views, which intersect the result with a date or banner afterwards and so need more headroom |
+| `TIERED_RELEVANCE` | on | group equally relevant notices and date-order each group; `0` restores plain score order |
+
+The caps are paid for twice — Elasticsearch sorts that many hits, and the caller
+then orders that many ids in a `Case`/`When` at roughly 0.2ms an id. Measured on
+this corpus, one page of the heaviest query costs 0.5s at 1000, 0.7s at 2000 and
+1.5s at 10000, which is why the list view stops at 2000 while the filter views,
+which have to intersect afterwards, do not.
 
 `title^5` and the clause boosts are not configurable; they are structural to the
 query and are asserted by the tests.
@@ -88,7 +133,8 @@ query and are asserted by the tests.
 
 The frontend sends `sort=relevance` or `sort=date`.
 
-**Relevance** scores the results and lets the score order them.
+**Relevance** groups the results into the tiers above, orders the title tiers by
+date and leaves the weak tiers in score order.
 
 **Date** pushes `datetime_modified desc` into Elasticsearch and drops the
 scoring block entirely. This matters more than it looks: the query is capped at
@@ -96,8 +142,8 @@ scoring block entirely. This matters more than it looks: the query is capped at
 survive the cut. Sorting by score and reordering afterwards silently drops
 recent-but-weak matches, which is exactly what it used to do.
 
-"Most Recent" therefore means the newest **1000** matches, not all of them, and
-`datetime_modified` means last edited — a revised notice resurfaces.
+"Most Recent" therefore means the newest `MAX_SEARCH_RESULTS` matches, not all
+of them, and `datetime_modified` means last edited — a revised notice resurfaces.
 
 ## When Elasticsearch is down
 
@@ -127,6 +173,13 @@ defects, all now closed and all covered by tests:
 4. **Multi-word queries were gated behind adjacency.** `bio data final year`
    returned 6 of 1620, because most notices read "Bio Data **for** Final Year".
 
+Ordering by score was then replaced by the tiers described above. With the four
+defects fixed the top of the results was right, but inside a group of equally
+relevant notices the order was arbitrary — 107 title matches for `microsoft`
+sorted by how short their titles were. Tiers keep the groups in relevance order
+and run each group newest first, and the cap moved from 1000 to 2000 so the
+grouping operates on more of the match set.
+
 A fifth, unrelated defect was also fixed: marking a notice read returned 403,
 because the frontend reads its CSRF cookie under a deployment-specific name that
 Django was not writing. That fix is `CSRF_COOKIE_NAME` in
@@ -138,7 +191,7 @@ Django was not writing. That fix is `CSRF_COOKIE_NAME` in
 python -m unittest discover --start-directory tests --verbose
 ```
 
-27 tests, well under a second, and they need **neither Django nor a running
+42 tests, well under a second, and they need **neither Django nor a running
 Elasticsearch** — only `elasticsearch-dsl`, which is pure Python. CI runs them
 on every push and pull request via `.github/workflows/tests.yml`.
 
@@ -149,7 +202,7 @@ with a `.to_dict()`, and `_run_phase` takes the client as an argument.
 so the code under test is the code that ships, and hands it a `FakeElasticsearch`
 that records the request body and replays canned hits.
 
-Four groups:
+Five groups:
 
 **`TestRecencyDecayShape`** recomputes the gaussian in the test at ages from 0 to
 10 years and checks the resulting multiplier stays inside `[FLOOR, 1.0]`, that
@@ -171,6 +224,13 @@ and runs when it should be, ids are de-duplicated with the stricter phase keepin
 the better rank, a date sort is reapplied across the merged phases, the result is
 truncated to `size`, and a failing client raises `ElasticsearchUnavailable`.
 
+**`TestRelevanceTiers`** covers the grouping: every strict clause carries its
+name, each combination of names maps to the right tier, a hit with no names at
+all still gets one, a stronger tier beats a weaker one however old it is, each
+tier runs newest first, a notice found twice keeps its strongest tier, the weak
+tiers keep the order Elasticsearch scored them in, a date search is untouched,
+and the flag turns the whole thing off.
+
 ### These tests were checked against real defects
 
 Each defect was reintroduced on a throwaway copy to confirm a test notices:
@@ -183,6 +243,11 @@ Each defect was reintroduced on a throwaway copy to confirm a test notices:
 | weaken the prefix clause | `test_a_partly_typed_word_is_scored_against_the_title` |
 | let drafts through | `test_no_phase_can_ever_return_a_draft` |
 | set the floor to zero | 2 tests in `TestRecencyDecayShape` |
+| invert the tier order | 4 tests in `TestRelevanceTiers` |
+| date-order the weak tiers as well | 2 tests in `TestRelevanceTiers` |
+| drop a clause name | `test_every_strict_clause_is_named_so_a_tier_can_be_read_back` |
+| let a later phase overwrite the tier | 2 tests across both merge groups |
+| ignore the tier and keep score order | 3 tests in `TestRelevanceTiers` |
 
 Worth repeating if the suite is extended. A test that cannot fail proves
 nothing, and doing this found a real weakness: the original floor assertion
@@ -207,6 +272,12 @@ result in the top 30 is graded **strong** (every query word in the title),
 carries a floor it must hold. The script exits non-zero if any query drops below
 its floor, so it can gate a release.
 
+The last column is a histogram of the tiers the top 30 came from — `T=` the
+phrase in the title, `T~` a partly typed word, `C=` the phrase in the body, `T*`
+a fragment inside a word, `rx` relaxed, `fz` fuzzy. Read it alongside the
+precision: it is what showed that date-ordering the fuzzy tier had broken the
+misspelling cases, since every regressed query read `fz30`.
+
 `scripts/corpus_profile.py` prints the most common words, phrases and banners in
 the corpus. Use it to pick new cases that reflect what people really search.
 
@@ -224,8 +295,10 @@ typo joins two words.
 
 - **The cap is real.** A query matching more than `MAX_SEARCH_RESULTS` notices
   returns only that many, and the count shown to the user is the capped number.
-  Raising it to 10,000 needs no reindex — that is Elasticsearch's default
-  `max_result_window` and the index does not override it.
+  Three of the thirty harness queries exceed 2000. Elasticsearch will serve
+  10,000 without a reindex, but the `Case`/`When` that reapplies the order costs
+  about 0.2ms an id, so raising it trades a second of page load for coverage of
+  the most generic queries.
 - **Boilerplate ranks.** "Google Form" appears in 5% of notice bodies, so about
   7 of the top 30 for `google` are notices titled after a form. Demoting the
   phrase would fix it at the cost of hand-tuning for one phrase.

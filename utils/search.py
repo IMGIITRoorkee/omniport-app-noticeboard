@@ -3,7 +3,13 @@ import os
 
 logger = logging.getLogger('noticeboard')
 
-MAX_SEARCH_RESULTS = int(os.getenv('NOTICEBOARD_MAX_SEARCH_RESULTS', '1000'))
+# Both caps are paid for twice: Elasticsearch sorts that many hits, and the
+# caller then orders that many ids in a Case/When, which costs about 0.2ms an
+# id. Ten thousand is the Elasticsearch default max_result_window and takes the
+# heaviest query on this corpus to 1.5s, so the list view stops earlier than
+# the filter views, which intersect their results with a date or banner and so
+# need the headroom more.
+MAX_SEARCH_RESULTS = int(os.getenv('NOTICEBOARD_MAX_SEARCH_RESULTS', '2000'))
 MAX_FILTERED_SEARCH_RESULTS = int(
     os.getenv('NOTICEBOARD_MAX_FILTERED_SEARCH_RESULTS', '10000')
 )
@@ -20,6 +26,33 @@ RECENCY_DECAY_FACTOR = float(os.getenv('NOTICEBOARD_ES_RECENCY_DECAY', '0.5'))
 # The share of the score recency can never take away. At zero the gaussian
 # multiplies old but perfect matches out of the results entirely.
 RECENCY_DECAY_FLOOR = float(os.getenv('NOTICEBOARD_ES_RECENCY_FLOOR', '0.5'))
+
+# Group equally relevant notices and order each group by date. Set to 0 to fall
+# back to ordering by score alone.
+TIERED_RELEVANCE = os.getenv('NOTICEBOARD_TIERED_RELEVANCE', '1') != '0'
+
+# Names given to the strict clauses, which Elasticsearch reports back per hit in
+# matched_queries. They are what a tier is read from.
+PHRASE_CLAUSE = 'phrase'
+TITLE_PREFIX_CLAUSE = 'title_prefix'
+TITLE_WILDCARD_CLAUSE = 'title_wildcard'
+
+# Relevance tiers, lowest first. A tier says how the notice matched rather than
+# how well, which is the boundary the score agrees with: for 'microsoft' the
+# title matches ran 72.6 down to 40.4 and the first body match scored 7.31.
+TIER_TITLE_EXACT = 1
+TIER_TITLE_PARTIAL = 2
+TIER_CONTENT_EXACT = 3
+TIER_TITLE_SUBSTRING = 4
+TIER_RELAXED = 5
+TIER_FUZZY = 6
+
+# Up to here a tier means "matched the same way", so the score only separates
+# notices by title length and date is the better order. Past it the score still
+# discriminates — which words matched, and how far the spelling was off — and
+# replacing it with date costs real precision: ordering the fuzzy tier by date
+# took 'gogle' from 100% to 23%, since it stops separating Google from Goel.
+LAST_DATE_ORDERED_TIER = TIER_TITLE_SUBSTRING
 
 
 class ElasticsearchUnavailable(Exception):
@@ -71,6 +104,7 @@ def _build_phases(keyword):
                 query=keyword,
                 type='phrase',
                 fields=['title^5', 'content'],
+                _name=PHRASE_CLAUSE,
             ),
             # Scores a partly typed word against the title. The wildcard below
             # matches one too, but is constant-scored and loses to any body hit.
@@ -80,6 +114,7 @@ def _build_phases(keyword):
                     'query': keyword,
                     'max_expansions': 50,
                     'boost': 5,
+                    '_name': TITLE_PREFIX_CLAUSE,
                 },
             ),
             ES_Q(
@@ -87,6 +122,7 @@ def _build_phases(keyword):
                 title={
                     'value': f'*{keyword.lower()}*',
                     'boost': 2,
+                    '_name': TITLE_WILDCARD_CLAUSE,
                 },
             ),
         ],
@@ -125,7 +161,36 @@ def _build_phases(keyword):
     return (('strict', strict), ('relaxed', relaxed), ('fuzzy', fuzzy))
 
 
-def _run_phase(es, query, size, sort_by_relevance):
+def _tier_for(phase_label, matched_queries):
+    """
+    Read a relevance tier off the clauses a hit matched
+    :param phase_label: the phase that returned the hit
+    :param matched_queries: the clause names Elasticsearch reported for it
+    :return: the tier, lower being more relevant
+    """
+
+    if phase_label == 'relaxed':
+        return TIER_RELAXED
+    if phase_label == 'fuzzy':
+        return TIER_FUZZY
+
+    matched = set(matched_queries or ())
+    in_title = TITLE_PREFIX_CLAUSE in matched
+    is_phrase = PHRASE_CLAUSE in matched
+
+    if in_title and is_phrase:
+        return TIER_TITLE_EXACT
+    if in_title:
+        return TIER_TITLE_PARTIAL
+    if is_phrase:
+        return TIER_CONTENT_EXACT
+
+    # Either the wildcard alone matched, a fragment inside a word, or the names
+    # went missing. Either way this is the weakest reading of a strict hit.
+    return TIER_TITLE_SUBSTRING
+
+
+def _run_phase(es, query, size, sort_by_relevance, phase_label='strict'):
     body = {
         'size': size,
         '_source': ['id', 'datetime_modified'],
@@ -159,20 +224,24 @@ def _run_phase(es, query, size, sort_by_relevance):
         )
 
     return [
-        (hit['_source']['id'], hit['_source'].get('datetime_modified') or '')
+        (
+            hit['_source']['id'],
+            hit['_source'].get('datetime_modified') or '',
+            _tier_for(phase_label, hit.get('matched_queries')),
+        )
         for hit in hits.get('hits', [])
     ]
 
 
-def get_ranked_notice_ids(
+def get_ranked_notices(
         keyword, size=MAX_SEARCH_RESULTS, sort_by_relevance=True
 ):
     """
-    Return the ids of notices matching the keyword
+    Return the notices matching the keyword, each with the tier it matched at
     :param keyword: the search keyword
-    :param size: the maximum number of ids to return
-    :param sort_by_relevance: order by relevance if True, newest first if not
-    :return: a list of notice ids, in the requested order
+    :param size: the maximum number of notices to return
+    :param sort_by_relevance: order by tier then date if True, date alone if not
+    :return: a list of (notice id, tier) pairs, in the requested order
     :raises ElasticsearchUnavailable: if the query could not be served
     """
 
@@ -184,7 +253,7 @@ def get_ranked_notice_ids(
         es = connections.get_connection()
 
         collected = []
-        seen = set()
+        tiers = {}
 
         for label, query in _build_phases(normalized_keyword):
             # Strict and relaxed always merge, since adjacency is too narrow a
@@ -194,18 +263,59 @@ def get_ranked_notice_ids(
 
             logger.debug('Elasticsearch notice phase %s: %s', label, query)
 
-            for notice_id, datetime_modified in _run_phase(
-                    es, query, size, sort_by_relevance
+            for notice_id, datetime_modified, tier in _run_phase(
+                    es, query, size, sort_by_relevance, label
             ):
-                if notice_id not in seen:
-                    seen.add(notice_id)
-                    collected.append((notice_id, datetime_modified))
+                if notice_id in tiers:
+                    # The phases run strongest first, so whatever tier is
+                    # already recorded is the strongest reading of this notice
+                    # and a later phase must not overwrite it.
+                    continue
+
+                tiers[notice_id] = tier
+                collected.append((notice_id, datetime_modified))
 
         # Each phase is ordered on its own, so the union needs sorting again.
-        # Relevance order needs no fix: the stricter phases already lead.
         if not sort_by_relevance:
             collected.sort(key=lambda pair: pair[1], reverse=True)
+        elif TIERED_RELEVANCE:
+            # Two stable passes. The first puts everything in date order; the
+            # second groups by tier, and hands the weak tiers a tie-breaker of
+            # the rank Elasticsearch gave them, which restores their score
+            # order. The strong tiers tie on 0 and keep the date order.
+            scored_rank = {
+                notice_id: rank
+                for rank, (notice_id, _) in enumerate(collected)
+            }
+            collected.sort(key=lambda pair: pair[1], reverse=True)
+            collected.sort(key=lambda pair: (
+                tiers[pair[0]],
+                0 if tiers[pair[0]] <= LAST_DATE_ORDERED_TIER
+                else scored_rank[pair[0]],
+            ))
 
-        return [notice_id for notice_id, _ in collected[:size]]
+        return [
+            (notice_id, tiers[notice_id])
+            for notice_id, _ in collected[:size]
+        ]
     except Exception as exc:
         raise ElasticsearchUnavailable(exc) from exc
+
+
+def get_ranked_notice_ids(
+        keyword, size=MAX_SEARCH_RESULTS, sort_by_relevance=True
+):
+    """
+    Return the ids of notices matching the keyword
+    :param keyword: the search keyword
+    :param size: the maximum number of ids to return
+    :param sort_by_relevance: order by tier then date if True, date alone if not
+    :return: a list of notice ids, in the requested order
+    :raises ElasticsearchUnavailable: if the query could not be served
+    """
+
+    return [
+        notice_id for notice_id, _ in get_ranked_notices(
+            keyword, size, sort_by_relevance
+        )
+    ]

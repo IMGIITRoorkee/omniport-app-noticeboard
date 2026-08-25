@@ -23,6 +23,10 @@ def postgres_search(queryset, keyword, sort_mode):
     :return: the matching queryset, ordered
     """
 
+    # The same normalisation the Elasticsearch path applies, so the fallback
+    # answers an underscored query the way the primary search would.
+    keyword = keyword.replace('_', ' ')
+
     search_vector = (
         SearchVector('title', weight='A')
         + SearchVector('content', weight='B')

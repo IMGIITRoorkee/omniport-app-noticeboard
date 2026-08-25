@@ -5,9 +5,9 @@ BaseConfig = get_app_config_class(__file__)
 
 class Config(BaseConfig):
 
-	def ready(self):
-		super_ready = getattr(super(), 'ready', None)
-		if callable(super_ready):
-			super_ready()
+    def ready(self):
+        super_ready = getattr(super(), 'ready', None)
+        if callable(super_ready):
+            super_ready()
 
-		from noticeboard import documents 
+        from noticeboard import documents

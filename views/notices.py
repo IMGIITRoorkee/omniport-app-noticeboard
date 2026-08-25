@@ -18,6 +18,7 @@ from noticeboard.models import *
 from categories.models import Category
 from noticeboard.permissions import IsUploader, isPublicInternet
 from noticeboard.pagination import NoticesPageNumberPagination
+from noticeboard.utils.filters import postgres_search
 from noticeboard.utils.search import (
     ElasticsearchUnavailable, get_ranked_notice_ids
 )
@@ -82,13 +83,11 @@ class NoticeViewSet(viewsets.ModelViewSet):
                         exc,
                         exc_info=True,
                     )
-                    queryset = Notice.objects.annotate(
-                        search=SearchVector('title', 'content'),
-                    ).filter(
-                        search=keyword.replace('_', ' '),
-                    ).filter(
-                        is_draft=False,
-                    ).order_by('-datetime_modified')
+                    queryset = postgres_search(
+                        Notice.objects.all(),
+                        keyword,
+                        normalized_sort_mode,
+                    )
                 else:
                     queryset = Notice.objects.filter(id__in=notice_id_list)
 

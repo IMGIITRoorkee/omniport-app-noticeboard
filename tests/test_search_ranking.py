@@ -17,6 +17,8 @@ August 2026 and were found by hand, because this app had no tests.
 import importlib.util
 import math
 import pathlib
+import sys
+import types
 import unittest
 
 APP = pathlib.Path(__file__).resolve().parent.parent
@@ -39,6 +41,118 @@ def _load_search_module():
 
 
 search = _load_search_module()
+
+
+def _load_filters_module():
+    """
+    Load utils/filters.py without importing Django or the noticeboard package
+
+    `filter_search` never reaches a database. It narrows a queryset by calling
+    `filter` and `order_by`, so standing in for the ORM is enough to watch
+    what it asks for. That is worth doing without a test database because the
+    endpoints it guards are readable without logging in.
+
+    `noticeboard.utils.search` is mapped to the module already loaded above
+    rather than to a stub, so `ElasticsearchUnavailable` is the very class the
+    fallback catches instead of a look-alike that would slip past `except`.
+    """
+
+    class _Expression:
+        """
+        Enough of a SearchVector, SearchRank, Case or When to be built
+
+        The query these compose is PostgreSQL's problem, not this module's;
+        all `filter_search` does is pass them along.
+        """
+
+        def __init__(self, *args, **kwargs):
+            self.args = args
+            self.kwargs = kwargs
+
+        def __add__(self, other):
+            return _Expression(*(self.args + other.args))
+
+    postgres_module = types.ModuleType('django.contrib.postgres.search')
+    for name in ('SearchQuery', 'SearchRank', 'SearchVector'):
+        setattr(postgres_module, name, _Expression)
+
+    models_module = types.ModuleType('django.db.models')
+    models_module.Case = _Expression
+    models_module.When = _Expression
+
+    stubs = {
+        'django': types.ModuleType('django'),
+        'django.contrib': types.ModuleType('django.contrib'),
+        'django.contrib.postgres': types.ModuleType('django.contrib.postgres'),
+        'django.contrib.postgres.search': postgres_module,
+        'django.db': types.ModuleType('django.db'),
+        'django.db.models': models_module,
+        'noticeboard': types.ModuleType('noticeboard'),
+        'noticeboard.utils': types.ModuleType('noticeboard.utils'),
+        'noticeboard.utils.search': search,
+    }
+
+    saved = {name: sys.modules.get(name) for name in stubs}
+    sys.modules.update(stubs)
+    try:
+        path = APP / 'utils/filters.py'
+        spec = importlib.util.spec_from_file_location(
+            'noticeboard_filters',
+            path,
+        )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+    finally:
+        for name, original in saved.items():
+            if original is None:
+                del sys.modules[name]
+            else:
+                sys.modules[name] = original
+    return module
+
+
+filters = _load_filters_module()
+
+
+class FakeQuerySet:
+    """
+    Stands in for a Notice queryset, recording what is asked of it
+
+    Only the methods `filter_search` and `postgres_search` reach for are here.
+    Each records the call and returns the same object, so a chain can be
+    followed to its end and read afterwards.
+    """
+
+    def __init__(self):
+        self.calls = []
+
+    def _record(self, name, args=(), kwargs=None):
+        self.calls.append((name, args, kwargs or {}))
+        return self
+
+    def filter(self, *args, **kwargs):
+        return self._record('filter', args, kwargs)
+
+    def annotate(self, *args, **kwargs):
+        return self._record('annotate', args, kwargs)
+
+    def order_by(self, *args, **kwargs):
+        return self._record('order_by', args, kwargs)
+
+    def none(self):
+        return self._record('none', (), {})
+
+    @property
+    def excludes_drafts(self):
+        return any(
+            kwargs.get('is_draft') is False
+            for name, _, kwargs in self.calls
+            if name == 'filter'
+        )
+
+    @property
+    def method_names(self):
+        return [name for name, _, _ in self.calls]
 
 
 class FakeElasticsearch:
@@ -754,6 +868,104 @@ class TestRelevanceTiers(unittest.TestCase):
             [1, 2],
             'with the flag off the order Elasticsearch returned must survive '
             'untouched, or there is no way back without a deploy',
+        )
+
+
+class TestDraftExclusion(unittest.TestCase):
+    """
+    Defect 5: unpublished drafts reachable through the filter endpoints
+
+    `filter_search` backs `/api/noticeboard/filter/` and
+    `/api/noticeboard/date_filter_view/`. Both are `IsAuthenticatedOrReadOnly`,
+    so an anonymous GET reaches them, and neither viewset excludes drafts when
+    it builds the queryset it hands over: `FilterViewSet` passes
+    `Notice.objects.filter(banner=...)` and `DateFilterViewSet` passes a date
+    range. The exclusion in here is the only one there is.
+
+    It went missing once. It was added unconditionally, then a rewrite left it
+    on the keyword path alone, so browsing a banner with no search term —
+    which is the ordinary way the page is used — returned drafts to anyone.
+    A test per path is what stops that happening a third time, since the loss
+    reads as a harmless refactor in a diff.
+    """
+
+    def setUp(self):
+        self.original = filters.get_ranked_notice_ids
+
+    def tearDown(self):
+        filters.get_ranked_notice_ids = self.original
+
+    def _run(self, data, ranked=(), unavailable=False):
+        def fake_ranker(keyword, size=None, sort_by_relevance=False):
+            if unavailable:
+                raise search.ElasticsearchUnavailable('no cluster')
+            return list(ranked)
+
+        filters.get_ranked_notice_ids = fake_ranker
+        queryset = FakeQuerySet()
+        filters.filter_search(data, queryset)
+        return queryset
+
+    def test_browsing_without_a_keyword_still_hides_drafts(self):
+        queryset = self._run({'banner': '3'})
+
+        self.assertTrue(
+            queryset.excludes_drafts,
+            'a banner or date filter with no keyword is the common case and '
+            'reaches an endpoint an anonymous caller can read, so dropping '
+            'the exclusion here publishes every unpublished notice',
+        )
+
+    def test_an_empty_keyword_still_hides_drafts(self):
+        queryset = self._run({'keyword': ''})
+
+        self.assertTrue(
+            queryset.excludes_drafts,
+            'an empty keyword takes the no-keyword path, and a caller can '
+            'send one as easily as omitting the parameter',
+        )
+
+    def test_a_keyword_search_hides_drafts(self):
+        queryset = self._run({'keyword': 'hostel'}, ranked=[4, 9])
+
+        self.assertTrue(queryset.excludes_drafts)
+
+    def test_a_relevance_sorted_search_hides_drafts(self):
+        queryset = self._run(
+            {'keyword': 'hostel', 'sort': 'relevance'},
+            ranked=[4, 9],
+        )
+
+        self.assertTrue(queryset.excludes_drafts)
+
+    def test_the_postgresql_fallback_hides_drafts(self):
+        queryset = self._run({'keyword': 'hostel'}, unavailable=True)
+
+        self.assertTrue(
+            queryset.excludes_drafts,
+            'the fallback runs precisely when Elasticsearch is down, so it '
+            'cannot be the one path where the guarantee lapses',
+        )
+
+    def test_a_keyword_matching_nothing_returns_an_empty_queryset(self):
+        queryset = self._run({'keyword': 'hostel'}, ranked=[])
+
+        self.assertIn(
+            'none',
+            queryset.method_names,
+            'no matches must end in none(), not in an unfiltered queryset',
+        )
+
+    def test_the_no_keyword_path_is_still_newest_first(self):
+        queryset = self._run({'banner': '3'})
+
+        ordering = [
+            args for name, args, _ in queryset.calls if name == 'order_by'
+        ]
+        self.assertEqual(
+            ordering,
+            [('-datetime_modified',)],
+            'excluding drafts must not disturb the order the page expects',
         )
 
 

@@ -52,6 +52,12 @@ def filter_search(data, queryset):
     Check if a search is applied in a filtered result
     """
 
+    # Drafts are unpublished, so they are excluded here, once, ahead of the
+    # branching. An earlier version applied this per branch and a later
+    # rewrite kept it only on the keyword path, which handed drafts to any
+    # caller who left the keyword out. One exclusion covers every return.
+    queryset = queryset.filter(is_draft=False)
+
     keyword = data.get('keyword')
     if not keyword:
         return queryset.order_by('-datetime_modified')
@@ -76,7 +82,7 @@ def filter_search(data, queryset):
     if not notice_id_list:
         return queryset.none()
 
-    queryset = queryset.filter(id__in=notice_id_list, is_draft=False)
+    queryset = queryset.filter(id__in=notice_id_list)
 
     if sort_mode == 'relevance':
         return queryset.order_by(Case(*[

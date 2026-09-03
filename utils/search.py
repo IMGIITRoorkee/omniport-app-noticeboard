@@ -3,43 +3,30 @@ import os
 
 logger = logging.getLogger('noticeboard')
 
-# Both caps are paid for twice: Elasticsearch sorts that many hits, and the
-# caller then orders that many ids in a Case/When, which costs about 0.2ms an
-# id. Ten thousand is the Elasticsearch default max_result_window and takes the
-# heaviest query on this corpus to 1.5s, so the list view stops earlier than
-# the filter views, which intersect their results with a date or banner and so
-# need the headroom more.
+# What each of these does, what it costs and why the default is what it is:
+# docs/architecture/search.md. All are overridable per deployment.
+
+# Result caps, and the hit count below which a phase escalates to the next
 MAX_SEARCH_RESULTS = int(os.getenv('NOTICEBOARD_MAX_SEARCH_RESULTS', '2000'))
 MAX_FILTERED_SEARCH_RESULTS = int(
     os.getenv('NOTICEBOARD_MAX_FILTERED_SEARCH_RESULTS', '10000')
 )
-
-# Below this many hits a phase escalates to the next. Escalating only on zero
-# strands a misspelling that also appears in the notices themselves.
 MIN_SEARCH_RESULTS = int(os.getenv('NOTICEBOARD_MIN_SEARCH_RESULTS', '5'))
 REQUEST_TIMEOUT = 3
+
+# Recency decay, applied as a multiplier on the BM25 score
 RECENCY_DECAY_ORIGIN = os.getenv('NOTICEBOARD_ES_RECENCY_ORIGIN', 'now')
 RECENCY_DECAY_SCALE = os.getenv('NOTICEBOARD_ES_RECENCY_SCALE', '365d')
 RECENCY_DECAY_OFFSET = os.getenv('NOTICEBOARD_ES_RECENCY_OFFSET', '30d')
 RECENCY_DECAY_FACTOR = float(os.getenv('NOTICEBOARD_ES_RECENCY_DECAY', '0.5'))
-
-# The share of the score recency can never take away. At zero the gaussian
-# multiplies old but perfect matches out of the results entirely.
 RECENCY_DECAY_FLOOR = float(os.getenv('NOTICEBOARD_ES_RECENCY_FLOOR', '0.5'))
 
-# Group equally relevant notices and order each group by date. Set to 0 to fall
-# back to ordering by score alone.
-TIERED_RELEVANCE = os.getenv('NOTICEBOARD_TIERED_RELEVANCE', '1') != '0'
-
-# Names given to the strict clauses, which Elasticsearch reports back per hit in
-# matched_queries. They are what a tier is read from.
+# Strict clause names, which Elasticsearch reports per hit in matched_queries
 PHRASE_CLAUSE = 'phrase'
 TITLE_PREFIX_CLAUSE = 'title_prefix'
 TITLE_WILDCARD_CLAUSE = 'title_wildcard'
 
-# Relevance tiers, lowest first. A tier says how the notice matched rather than
-# how well, which is the boundary the score agrees with: for 'microsoft' the
-# title matches ran 72.6 down to 40.4 and the first body match scored 7.31.
+# Relevance tiers, lowest first, read from matched_queries rather than score
 TIER_TITLE_EXACT = 1
 TIER_TITLE_PARTIAL = 2
 TIER_CONTENT_EXACT = 3
@@ -47,11 +34,11 @@ TIER_TITLE_SUBSTRING = 4
 TIER_RELAXED = 5
 TIER_FUZZY = 6
 
-# Up to here a tier means "matched the same way", so the score only separates
-# notices by title length and date is the better order. Past it the score still
-# discriminates — which words matched, and how far the spelling was off — and
-# replacing it with date costs real precision: ordering the fuzzy tier by date
-# took 'gogle' from 100% to 23%, since it stops separating Google from Goel.
+# Group equally relevant notices and date-order each group; 0 for score order
+TIERED_RELEVANCE = os.getenv('NOTICEBOARD_TIERED_RELEVANCE', '1') != '0'
+
+# Past this tier the score still discriminates, so date order would cost
+# precision
 LAST_DATE_ORDERED_TIER = TIER_TITLE_SUBSTRING
 
 

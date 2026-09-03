@@ -254,48 +254,11 @@ nothing, and doing this found a real weakness: the original floor assertion
 compared against the module's own floor, so setting that floor to zero made the
 test pass vacuously.
 
-## Relevance harness
-
-The unit tests prove the query is built as intended. They cannot prove the
-results are any good — that needs real notices.
-
-```
-docker exec <django-container> bash -c \
-    'cd /omniport && DJANGO_SETTINGS_MODULE=omniport.settings.settings \
-     python apps/noticeboard/scripts/relevance_eval.py'
-```
-
-30 queries chosen from what this noticeboard actually contains — companies,
-placement and academic phrases, hostel names, acronyms and misspellings. Each
-result in the top 30 is graded **strong** (every query word in the title),
-**partial** (some in the title, or all in the body) or **junk**, and each query
-carries a floor it must hold. The script exits non-zero if any query drops below
-its floor, so it can gate a release.
-
-The last column is a histogram of the tiers the top 30 came from — `T=` the
-phrase in the title, `T~` a partly typed word, `C=` the phrase in the body, `T*`
-a fragment inside a word, `rx` relaxed, `fz` fuzzy. Read it alongside the
-precision: it is what showed that date-ordering the fuzzy tier had broken the
-misspelling cases, since every regressed query read `fz30`.
-
-`scripts/corpus_profile.py` prints the most common words, phrases and banners in
-the corpus. Use it to pick new cases that reflect what people really search.
-
-**Read the results, not only the number.** The grader scores token overlap, so it
-cannot tell a notice about Google from one that merely links a Google Form: it
-reports 100% for `google` where reading the top 30 by hand gives 23/30. It is a
-regression detector, not a measure of quality.
-
-Three cases sit below the rest for reasons that are not defects, documented in
-the script: `gate` matches Gateway and Gates, `ganga bhawan` has only two real
-matches in the whole corpus, and one `scholarship` hit is a notice whose own
-typo joins two words.
-
 ## Known limitations
 
 - **The cap is real.** A query matching more than `MAX_SEARCH_RESULTS` notices
   returns only that many, and the count shown to the user is the capped number.
-  Three of the thirty harness queries exceed 2000. Elasticsearch will serve
+  The most generic queries exceed 2000. Elasticsearch will serve
   10,000 without a reindex, but the `Case`/`When` that reapplies the order costs
   about 0.2ms an id, so raising it trades a second of page load for coverage of
   the most generic queries.

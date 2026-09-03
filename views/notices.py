@@ -1,6 +1,7 @@
 import logging
 
-from django.contrib.postgres.search import SearchVector, SearchQuery
+from django.contrib.postgres.search import SearchVector
+from django.db.models import Case, When
 from rest_framework import viewsets
 from rest_framework import status
 from rest_framework.response import Response
@@ -17,7 +18,10 @@ from noticeboard.models import *
 from categories.models import Category
 from noticeboard.permissions import IsUploader, isPublicInternet
 from noticeboard.pagination import NoticesPageNumberPagination
-from notifications.actions import push_notification
+from noticeboard.utils.filters import postgres_search
+from noticeboard.utils.search import (
+    ElasticsearchUnavailable, get_ranked_notice_ids
+)
 
 logger = logging.getLogger('noticeboard')
 
@@ -39,6 +43,7 @@ class NoticeViewSet(viewsets.ModelViewSet):
 
         notice_class = self.request.query_params.get('class', None)
         keyword = self.request.query_params.get('keyword', None)
+        sort_mode = self.request.query_params.get('sort', 'date')
         important_only = self.request.query_params.get('important', False)
         unread_only = self.request.query_params.get('unread', False)
 
@@ -63,14 +68,36 @@ class NoticeViewSet(viewsets.ModelViewSet):
                 ).exclude(banner=banner_object).order_by('-datetime_modified')
 
             elif keyword:
-                search_vector = SearchVector('title')
-                queryset = Notice.objects.annotate(
-                    search=search_vector
-                ).filter(
-                    search=SearchQuery(keyword)
-                ).filter(
-                    is_draft=False
-                ).order_by('-datetime_modified')
+                normalized_sort_mode = (sort_mode or 'date').strip().lower()
+                sort_by_relevance = normalized_sort_mode == 'relevance'
+
+                try:
+                    notice_id_list = get_ranked_notice_ids(
+                        keyword,
+                        sort_by_relevance=sort_by_relevance,
+                    )
+                except ElasticsearchUnavailable as exc:
+                    logger.warning(
+                        'Elasticsearch unavailable for notice search, falling '
+                        'back to PostgreSQL full-text search: %s',
+                        exc,
+                        exc_info=True,
+                    )
+                    queryset = postgres_search(
+                        Notice.objects.all(),
+                        keyword,
+                        normalized_sort_mode,
+                    )
+                else:
+                    queryset = Notice.objects.filter(id__in=notice_id_list)
+
+                    if notice_id_list and sort_by_relevance:
+                        queryset = queryset.order_by(Case(*[
+                            When(id=pk, then=pos)
+                            for pos, pk in enumerate(notice_id_list)
+                        ]))
+                    else:
+                        queryset = queryset.order_by('-datetime_modified')
 
             else:
                 queryset = Notice.objects.filter(
@@ -173,7 +200,7 @@ class NoticeViewSet(viewsets.ModelViewSet):
 
         if serializer.is_valid():
             person = self.request.person
-            serializer.save(uploader=person)
+            notice = serializer.save(uploader=person)
             category = notice.banner.category_node
             # Remove this notice from all users' read notices set
             notice.read_notice_set.clear()
@@ -216,6 +243,14 @@ class NoticeViewSet(viewsets.ModelViewSet):
         logger.warning(f'Request to update notice #{notice.id} denied for '
                        f'{self.request.person}')
         return Response(status=status.HTTP_400_BAD_REQUEST)
+
+    def destroy(self, request, *args, **kwargs):
+        # Intentionally no-op override to avoid parent-side effects.
+        notice = self.get_object()
+
+        self.perform_destroy(notice)
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class ExpiredNoticeViewSet(viewsets.ModelViewSet):

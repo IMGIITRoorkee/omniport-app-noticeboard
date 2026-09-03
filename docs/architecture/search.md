@@ -115,9 +115,9 @@ a code change.
 | `RECENCY_DECAY_SCALE` | `365d` | how quickly the curve falls |
 | `RECENCY_DECAY_OFFSET` | `30d` | grace period before any decay |
 | `RECENCY_DECAY_FACTOR` | `0.5` | curve value one scale past the offset |
-| `MIN_SEARCH_RESULTS` | `5` | below this, escalate to the next phase |
+| `MIN_SEARCH_RESULTS` | `5` | below this, escalate to the next phase. Escalating only on zero would strand a misspelling that also appears in the notices themselves |
 | `MAX_SEARCH_RESULTS` | `2000` | cap on ids returned to the notice list |
-| `MAX_FILTERED_SEARCH_RESULTS` | `10000` | cap for the filter views, which intersect the result with a date or banner afterwards and so need more headroom |
+| `MAX_FILTERED_SEARCH_RESULTS` | `10000` | cap for the filter views, which intersect the result with a date or banner afterwards and so need more headroom. Also Elasticsearch's default `max_result_window` |
 | `TIERED_RELEVANCE` | on | group equally relevant notices and date-order each group; `0` restores plain score order |
 
 The caps are paid for twice — Elasticsearch sorts that many hits, and the caller

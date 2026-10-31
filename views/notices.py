@@ -12,7 +12,9 @@ from noticeboard.utils.notices import (
 )
 from noticeboard.utils.get_recipients import get_recipients
 from noticeboard.utils.send_email import send_email
-from noticeboard.utils.send_push_notification import send_push_notification
+from noticeboard.utils.send_push_notification import (
+    is_first_publication, send_push_notification
+)
 from noticeboard.serializers.notices import *
 from noticeboard.models import *
 from categories.models import Category
@@ -162,8 +164,6 @@ class NoticeViewSet(viewsets.ModelViewSet):
             persons = list()
             ignore_subscriptions = False
             mail_subject_text = f'{notice.banner.name}: {notice.title}'
-            notification_template = f'{notice.uploader.full_name} uploaded a notice '\
-                                    f'in {notice.banner.category_node.name}'
             if super_upload_right and is_send_notification and send_notification_to_role:
                 persons = get_recipients(role=send_notification_to_role)
                 ignore_subscriptions = True
@@ -180,14 +180,13 @@ class NoticeViewSet(viewsets.ModelViewSet):
                 by=person.id,
                 notice_id=notice.id,
             )
-            send_push_notification(
-                    template=notification_template,
-                    persons=persons,
-                    has_custom_user_target=ignore_subscriptions,
-                    send_only_to_subscribed_targets=(not ignore_subscriptions),
+            if is_first_publication(was_draft=True, is_draft=notice.is_draft):
+                send_push_notification(
+                    template=notice.title,
                     category=category,
                     notice_id=notice.id,
-            )
+                    persons=persons,
+                )
 
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         logger.warning(f'Request to upload notice denied for '
@@ -196,6 +195,8 @@ class NoticeViewSet(viewsets.ModelViewSet):
 
     def update(self, request, *args, **kwargs):
         notice = self.get_object()
+        # Read before saving, which changes this same instance
+        was_draft = notice.is_draft
         serializer = NoticeSerializer(notice, data=self.request.data)
 
         if serializer.is_valid():
@@ -212,8 +213,6 @@ class NoticeViewSet(viewsets.ModelViewSet):
             persons = list()
             ignore_subscriptions = False
             mail_subject_text = f'[Updated] {notice.banner.name}: {notice.title}'
-            notification_template = f'{notice.uploader.full_name} updated the notice '\
-                                    f'#{notice.id} in {notice.banner.category_node.name}'
             if super_upload_right and is_send_notification and send_notification_to_role:
                 persons = get_recipients(role=send_notification_to_role)
                 ignore_subscriptions = True
@@ -230,14 +229,13 @@ class NoticeViewSet(viewsets.ModelViewSet):
                 by=person.id,
                 notice_id=notice.id,
             )
-            send_push_notification(
-                    template=notification_template,
-                    persons=persons,
-                    has_custom_user_target=ignore_subscriptions,
-                    send_only_to_subscribed_targets=(not ignore_subscriptions),
+            if is_first_publication(was_draft=was_draft, is_draft=notice.is_draft):
+                send_push_notification(
+                    template=notice.title,
                     category=category,
                     notice_id=notice.id,
-            )
+                    persons=persons,
+                )
 
             return Response(serializer.data, status=status.HTTP_200_OK)
         logger.warning(f'Request to update notice #{notice.id} denied for '
